@@ -1,0 +1,643 @@
+<!doctype html>
+<!-- SPDX-License-Identifier: GPL-2.0-only -->
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PPK2 Live</title>
+<link rel="icon" href="data:,">
+<style>
+  :root {
+    --bg: #fcfcfb; --fg: #0b0b0b; --muted: #52514e; --grid: #e4e3df;
+    --env: #2a78d633; --line: #2a78d6; --warn: #c0392b; --panel: #f3f2ef;
+    --wake: #eb683424; --wake-edge: #eb6834; --sel: #7a5af520; --sel-edge: #7a5af5;
+    --trig: #c0392b;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #141414; --fg: #ececea; --muted: #a3a29e; --grid: #2b2b29;
+      --env: #5b9be640; --line: #5b9be6; --warn: #e5735f; --panel: #1d1d1c;
+      --wake: #f0875a2e; --wake-edge: #f0875a; --sel: #9d85ff2a; --sel-edge: #9d85ff;
+      --trig: #e5735f;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--fg);
+         font: 14px/1.4 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  header { display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; padding: 10px 16px 4px; }
+  h1 { font-size: 16px; margin: 0 6px 0 0; font-weight: 600; }
+  .row { display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; padding: 4px 16px; }
+  .ctl { display: flex; gap: 6px; align-items: center; color: var(--muted); }
+  select, button, input { font: inherit; color: var(--fg); background: var(--panel);
+    border: 1px solid var(--grid); border-radius: 6px; padding: 3px 8px; }
+  input[type=number] { width: 5.5em; }
+  button { cursor: pointer; }
+  button[aria-pressed="true"] { border-color: var(--line); color: var(--line); }
+  button.armed { border-color: var(--trig); color: var(--trig); }
+  #status { margin-left: auto; color: var(--muted); }
+  nav a { color: var(--muted); text-decoration: none; padding: 3px 8px; border-radius: 6px; }
+  nav a.navon { color: var(--fg); background: var(--panel); }
+  #status.bad { color: var(--warn); }
+  #trigState { color: var(--muted); }
+  #trigState.hot { color: var(--trig); }
+  .group { padding: 4px 16px; }
+  .group h2 { font-size: 12px; font-weight: 600; color: var(--muted); margin: 4px 0;
+              text-transform: uppercase; letter-spacing: .04em; }
+  .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 8px; }
+  .stat { background: var(--panel); border-radius: 8px; padding: 6px 10px; }
+  .stat b { display: block; font-size: 18px; font-variant-numeric: tabular-nums; }
+  .stat span { color: var(--muted); font-size: 12px; }
+  .stat small { color: var(--muted); font-size: 12px; }
+  #wrap { position: relative; height: 56vh; min-height: 280px; margin: 8px 16px; touch-action: none; }
+  canvas { position: absolute; inset: 0; width: 100%; height: 100%; cursor: crosshair; }
+  #cursor { position: absolute; pointer-events: none; background: var(--panel);
+            border: 1px solid var(--grid); border-radius: 6px; padding: 2px 6px;
+            font-size: 12px; display: none; white-space: nowrap; z-index: 2; }
+  #selbox { position: absolute; top: 8px; left: 72px; background: var(--panel);
+            border: 1px solid var(--sel-edge); border-radius: 8px; padding: 6px 10px;
+            font-size: 13px; display: none; z-index: 1; max-width: calc(100% - 90px); }
+  #selbox b { font-variant-numeric: tabular-nums; }
+  #selbox .btns { margin-top: 4px; display: flex; gap: 6px; }
+  #viewinfo { color: var(--muted); font-size: 12px; padding: 0 16px; }
+  table { border-collapse: collapse; width: 100%; font-variant-numeric: tabular-nums; }
+  th, td { text-align: right; padding: 4px 8px; border-bottom: 1px solid var(--grid); white-space: nowrap; }
+  th:first-child, td:first-child { text-align: left; }
+  th { color: var(--muted); font-weight: 600; font-size: 12px; }
+  tr.inbuf { cursor: pointer; }
+  tr.inbuf:hover td { background: var(--panel); }
+  tr.old td { color: var(--muted); }
+  #wakes { overflow-x: auto; padding-bottom: 16px; }
+  .hint { color: var(--muted); font-size: 12px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>PPK2</h1>
+  <nav class="ctl"><a href="./" class="navon">Live</a><a href="auswertung">Auswertung</a></nav>
+  <label class="ctl">Fenster
+    <select id="win">
+      <option value="0.1">0,1 s</option><option value="0.5">0,5 s</option>
+      <option value="2">2 s</option><option value="5">5 s</option>
+      <option value="10" selected>10 s</option><option value="30">30 s</option>
+      <option value="60">60 s</option><option value="120">120 s</option>
+    </select>
+  </label>
+  <label class="ctl">Skala
+    <select id="scale"><option value="log" selected>log</option><option value="lin">linear</option></select>
+  </label>
+  <button id="yhold" aria-pressed="false" title="y-Achse auf dem aktuellen Bereich festhalten">Achse halten</button>
+  <button id="pause" aria-pressed="false">Pause</button>
+  <button id="live" title="Zurück zur Live-Anzeige (Doppelklick ins Diagramm)">Live</button>
+  <button id="zin" title="Zoom +">+</button><button id="zout" title="Zoom −">−</button>
+  <button id="csv" title="Ausschnitt (oder Auswahl) als CSV, 1-ms-Werte">CSV</button>
+  <button id="png" title="Diagramm als Bild">PNG</button>
+  <span id="status">verbinde …</span>
+</header>
+<div class="row">
+  <button id="trig" title="Anhalten, sobald die Schwelle überschritten wird">Trigger</button>
+  <label class="ctl">Schwelle <input id="trigLevel" type="number" min="0" step="0.1" value="5"> mA</label>
+  <label class="ctl">über
+    <select id="trigMode"><option value="100">100-ms-Mittel</option><option value="1">1-ms-Spitze</option></select>
+  </label>
+  <label class="ctl">Vorlauf
+    <select id="trigPre"><option value="0.1">10 %</option><option value="0.25" selected>25 %</option><option value="0.5">50 %</option></select>
+  </label>
+  <span id="trigState"></span>
+</div>
+<div class="group">
+  <h2>Anzeige</h2>
+  <div class="stats">
+    <div class="stat"><span>Mittel letzte 1 s</span><b id="s1">–</b></div>
+    <div class="stat"><span>Mittel im Fenster</span><b id="sw">–</b></div>
+    <div class="stat"><span>Spitze (1 ms) im Fenster</span><b id="smax">–</b></div>
+    <div class="stat"><span>Ladung im Fenster</span><b id="sq">–</b></div>
+  </div>
+</div>
+<div class="group">
+  <h2>Logger</h2>
+  <div class="stats">
+    <div class="stat"><span id="lqT">Ruhestrom</span><b id="lq">–</b></div>
+    <div class="stat"><span>Laufzeit geschätzt</span><b id="ld">–</b><small id="ldSub"></small></div>
+    <div class="stat"><span>Ladung seit Start</span><b id="lc">–</b><small id="lcSub"></small></div>
+    <div class="stat"><span>Wachphasen</span><b id="lw">–</b><small id="lwSub"></small></div>
+    <div class="stat"><span>Samplerate</span><b id="lr">–</b></div>
+  </div>
+</div>
+<div id="wrap">
+  <canvas id="c"></canvas><div id="cursor"></div>
+  <div id="selbox"><div id="seltext"></div>
+    <div class="btns"><button id="selzoom">Zoom auf Auswahl</button><button id="selclear">Auswahl löschen</button></div>
+  </div>
+</div>
+<div id="viewinfo"></div>
+<div class="group">
+  <h2>Letzte Wachphasen</h2>
+  <div id="wakes"><span class="hint">keine Daten</span></div>
+  <div class="hint">Ziehen: Bereich ausmessen · Mausrad: Zoom · Shift+Mausrad: verschieben · Doppelklick: live · Klick auf Zeile: zur Wachphase springen (nur letzte 2 min)</div>
+</div>
+<script>
+"use strict";
+const HIST = 130;                     // Sekunden im Browser behalten
+let dt = 0.001, cap = Math.round(HIST / dt);
+let mn, mx, av;
+function alloc() {
+  cap = Math.round(HIST / dt);
+  mn = new Float32Array(cap); mx = new Float32Array(cap); av = new Float32Array(cap);
+  mn.fill(NaN); mx.fill(NaN); av.fill(NaN);
+}
+alloc();
+let seqEnd = 0, tEnd = 0, gotAny = false, lastMsg = 0, status = {};
+let win = 10;                         // Fensterbreite in s
+let frozenEnd = null;                 // null = live, sonst feste rechte Kante (seq)
+let sel = null;                       // {a, b} in seq, a < b
+let trig = { state: "off", T: null, endAt: null, sum: 0, n: 0, from: 0, below: false };
+let wakes = [], wakeCount = -1, trigTouched = false;
+let yAx = null, yHold = false;        // y-Bereich mit Hysterese: {log, y0, y1, shrinkSince}
+const $ = id => document.getElementById(id);
+const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+
+// ---------- Formatierung
+function fmtA(uA) {
+  if (!isFinite(uA)) return "–";
+  const a = Math.abs(uA);
+  if (a >= 1000) return (uA / 1000).toFixed(a >= 1e5 ? 0 : a >= 1e4 ? 1 : 2) + " mA";
+  if (a >= 1) return uA.toFixed(a >= 100 ? 0 : a >= 10 ? 1 : 2) + " µA";
+  return (uA * 1000).toFixed(0) + " nA";
+}
+function fmtQ(uAh) {
+  if (!isFinite(uAh)) return "–";
+  return Math.abs(uAh) >= 1000 ? (uAh / 1000).toFixed(2) + " mAh" : uAh.toFixed(uAh < 10 ? 2 : 1) + " µAh";
+}
+function fmtS(s) {
+  if (!isFinite(s)) return "–";
+  return s < 1 ? (s * 1000).toFixed(s < 0.01 ? 1 : 0) + " ms" : s < 60 ? s.toFixed(s < 10 ? 3 : 2) + " s"
+       : Math.floor(s / 60) + " min " + (s % 60).toFixed(0) + " s";
+}
+function fmtClock(t, ms) {
+  const d = new Date(t * 1000);
+  const p = (v, n = 2) => String(v).padStart(n, "0");
+  return p(d.getHours()) + ":" + p(d.getMinutes()) + ":" + p(d.getSeconds()) +
+         (ms ? "." + p(d.getMilliseconds(), 3) : "");
+}
+// Zeitzuordnung: t = tOff + seq * dt. tOff wird geglättet (die Zeitmarken der Blöcke
+// schwanken mit dem Lesetakt um einige ms) und bleibt während der Pause eingefroren,
+// damit die Zeitachse dann nicht zittert.
+let tOff = null, frozenOff = null;
+const tBase = () => (frozenEnd !== null && frozenOff !== null) ? frozenOff : tOff;
+const tOf = s => tBase() + s * dt;                     // Wanduhrzeit eines Buckets
+const seqOf = t => (t - tBase()) / dt;
+
+// ---------- Daten
+function onData(m) {
+  if (m.dt !== dt) { dt = m.dt; alloc(); seqEnd = 0; tOff = null; }
+  for (let s = Math.max(seqEnd, m.start - cap); s < m.start; s++) {
+    const i = s % cap; mn[i] = mx[i] = av[i] = NaN;
+  }
+  for (let k = 0; k < m.min.length; k++) {
+    const i = (m.start + k) % cap;
+    mn[i] = m.min[k]; mx[i] = m.max[k]; av[i] = m.avg[k];
+  }
+  const prevEnd = seqEnd;
+  if (m.end >= seqEnd) {
+    seqEnd = m.end; tEnd = m.t;
+    const o = m.t - m.end * dt;
+    if (tOff === null || Math.abs(o - tOff) > 0.5) tOff = o;   // Start oder Sprung (Neustart)
+    else tOff += 0.05 * (o - tOff);
+  }
+  gotAny = true; lastMsg = performance.now();
+  checkTrigger(Math.max(prevEnd, m.start), seqEnd);
+}
+function onStatus(st) {
+  status = st;
+  if (st.wake_count !== undefined && st.wake_count !== wakeCount) { wakeCount = st.wake_count; loadWakes(); }
+  if (!trigTouched && st.wake_trigger_uA) $("trigLevel").value = +(st.wake_trigger_uA / 1000).toFixed(2);
+  const q = st.quiet_avg_uA;
+  $("lqT").textContent = "Ruhestrom (" + ((st.quiet_window_s || 300) / 60).toFixed(0) + " min)";
+  $("lq").textContent = q !== undefined ? fmtA(q) : "–";
+  $("ld").textContent = st.est_days !== undefined ? st.est_days.toFixed(0) + " Tage" : "–";
+  $("ldSub").textContent = st.battery_mAh ? st.battery_mAh + " mAh × " + Math.round(st.battery_usable * 100) + " %" : "";
+  $("lc").textContent = st.charge_uAh !== undefined ? fmtQ(st.charge_uAh) : "–";
+  $("lcSub").textContent = st.runtime_h !== undefined ? "in " + (st.runtime_h < 1 ? Math.round(st.runtime_h * 60) + " min" : st.runtime_h < 48 ? st.runtime_h.toFixed(1) + " h" : (st.runtime_h / 24).toFixed(1) + " d") +
+                           ", Schnitt " + fmtA(st.avg_total_uA) : "";
+  if (st.wake_capture) {
+    $("lw").textContent = (st.wake_rec ? "läuft · " : "") + (st.wake_count ?? 0);
+    $("lwSub").textContent = st.wake_last_uAh !== undefined ? "letzte " + fmtQ(st.wake_last_uAh) + ", " + fmtS(st.wake_last_s) : "";
+  } else { $("lw").textContent = "aus"; $("lwSub").textContent = "WAKE_CAPTURE=0"; }
+  $("lr").textContent = st.samples && st.interval_s ? (st.samples / st.interval_s / 1000).toFixed(1) + " kSps" : "–";
+}
+
+let es = null;
+function connect() {
+  es = new EventSource("stream?s=" + Math.min(HIST - 5, 120));
+  es.onmessage = e => { try { onData(JSON.parse(e.data)); } catch (_) {} };
+  es.addEventListener("status", e => { try { onStatus(JSON.parse(e.data)); } catch (_) {} });
+  es.onerror = () => { $("status").textContent = "Verbindung unterbrochen, neuer Versuch …"; $("status").className = "bad"; };
+}
+connect();
+
+// ---------- Wachphasen
+async function loadWakes() {
+  try {
+    const r = await fetch("wakes?n=20"); const j = await r.json();
+    wakes = j.wakes.map(w => {
+      const t0 = Date.parse(w.trigger_utc) / 1000;
+      return Object.assign(w, { t0, t1: t0 + (w.active_s || 0), tStart: Date.parse(w.start_utc) / 1000 });
+    });
+    renderWakes(j.available);
+  } catch (_) {}
+}
+function renderWakes(available) {
+  if (!wakes.length) {
+    $("wakes").innerHTML = '<span class="hint">' + (available === false ? "Wachphasen-Aufnahme aus (WAKE_CAPTURE=0)" : "noch keine Wachphase erfasst") + "</span>";
+    return;
+  }
+  const oldest = tOf(seqEnd - cap + 1);
+  let h = "<table><tr><th>Zeit</th><th>aktiv</th><th>Ladung aktiv</th><th>gesamt</th><th>Mittel</th><th>Spitze 1 ms</th><th>Hinweis</th></tr>";
+  wakes.forEach((w, i) => {
+    const inbuf = gotAny && w.tStart > oldest;
+    const d = new Date(w.t0 * 1000);
+    const day = d.toLocaleDateString("de-DE", { day: "2-digit", month: "2-digit" });
+    const note = (w.truncated ? "abgeschnitten " : "") + (w.status && w.status !== "ok" ? w.status : "");
+    h += `<tr data-i="${i}" class="${inbuf ? "inbuf" : "old"}"><td>${day} ${fmtClock(w.t0)}</td><td>${fmtS(w.active_s)}</td>` +
+         `<td>${fmtQ(w.active_uAh)}</td><td>${fmtQ(w.charge_uAh)}</td><td>${fmtA(w.mean_uA)}</td>` +
+         `<td>${fmtA(w.peak_1ms_uA)}</td><td>${note}</td></tr>`;
+  });
+  $("wakes").innerHTML = h + "</table>";
+  $("wakes").querySelectorAll("tr.inbuf").forEach(tr => tr.onclick = () => {
+    const w = wakes[+tr.dataset.i];
+    const a = seqOf(w.tStart), b = seqOf(w.t1 + 2);
+    showRange(a, b); sel = { a: Math.round(seqOf(w.t0)), b: Math.round(seqOf(w.t1)) };
+  });
+}
+
+// ---------- Trigger
+["trigLevel", "trigMode", "trigPre"].forEach(id => $(id).addEventListener("input", () => trigTouched = true));
+$("trig").onclick = () => {
+  if (trig.state === "armed" || trig.state === "running") { trig.state = "off"; trig.T = null; }
+  else { trig = { state: "armed", T: null, endAt: null, sum: 0, n: 0, from: Math.max(0, seqEnd - Math.round(0.1 / dt)), below: false }; sel = null; setPaused(false); }
+  updTrig();
+};
+function updTrig() {
+  const b = $("trig"), s = $("trigState");
+  b.classList.toggle("armed", trig.state === "armed" || trig.state === "fired");
+  b.textContent = { off: "Trigger", armed: "Trigger scharf", running: "Trigger …", fired: "Neu scharf" }[trig.state];
+  s.className = trig.state === "fired" || trig.state === "running" ? "hot" : "";
+  s.textContent = trig.state === "armed" ? "wartet auf Anstieg über " + $("trigLevel").value + " mA …"
+    : trig.state === "running" ? "ausgelöst " + fmtClock(tOf(trig.T), true) + ", nimmt Nachlauf auf …"
+    : trig.state === "fired" ? "ausgelöst " + fmtClock(tOf(trig.T), true) + " (angehalten)" : "";
+}
+function fire() {
+  frozenEnd = null; setPaused(true); frozenEnd = trig.endAt; trig.state = "fired"; updTrig();
+}
+function checkTrigger(from, to) {
+  if (trig.state === "running" && seqEnd >= trig.endAt) { fire(); return; }
+  if (trig.state !== "armed") return;
+  const lvl = parseFloat($("trigLevel").value) * 1000;
+  if (!(lvl > 0)) return;
+  const use100 = $("trigMode").value === "100", N = Math.round(0.1 / dt);
+  for (let s = Math.max(from, trig.from); s < to; s++) {
+    let hit;
+    if (use100) {
+      const v = av[s % cap];
+      if (v !== v) { trig.sum = 0; trig.n = 0; continue; }
+      trig.sum += v; trig.n++;
+      if (trig.n > N) { const o = av[(s - N) % cap]; trig.sum -= (o === o ? o : 0); trig.n = N; }
+      if (trig.n < N) continue;
+      hit = trig.sum / N >= lvl;
+    } else {
+      const v = mx[s % cap];
+      if (v !== v) continue;
+      hit = v >= lvl;
+    }
+    // Flanke: erst unter der Schwelle gewesen, dann darüber (wie am Oszilloskop)
+    if (!hit) { trig.below = true; continue; }
+    if (hit && trig.below) {
+      const nb = Math.round(win / dt), pre = parseFloat($("trigPre").value);
+      trig.T = s - (use100 ? N - 1 : 0);
+      trig.endAt = trig.T + Math.round(nb * (1 - pre));
+      trig.state = "running"; updTrig();
+      if (seqEnd >= trig.endAt) fire();
+      return;
+    }
+  }
+}
+
+// ---------- Ansicht
+const cv = $("c"), ctx = cv.getContext("2d");
+function resize() {
+  const r = cv.getBoundingClientRect(), d = window.devicePixelRatio || 1;
+  cv.width = Math.round(r.width * d); cv.height = Math.round(r.height * d);
+}
+window.addEventListener("resize", resize); resize();
+
+function clampView() {
+  const nb = Math.round(win / dt);
+  if (frozenEnd !== null) {
+    frozenEnd = Math.min(frozenEnd, seqEnd);
+    frozenEnd = Math.max(frozenEnd, seqEnd - cap + 1 + nb);
+  }
+  win = Math.min(Math.max(win, 0.02), (cap - 2) * dt);
+}
+function showRange(a, b) {
+  if (b <= a) return;
+  win = Math.max((b - a) * dt, 0.02); frozenEnd = Math.round(b); clampView(); yAx = null;
+  setPaused(true);
+}
+function setPaused(p) {
+  if (p && frozenEnd === null) frozenEnd = seqEnd;
+  if (p && frozenOff === null) frozenOff = tOff;
+  if (!p) { frozenEnd = null; frozenOff = null; }
+  $("pause").setAttribute("aria-pressed", p); $("pause").textContent = p ? "Weiter" : "Pause";
+}
+$("pause").onclick = () => setPaused(frozenEnd === null);
+$("live").onclick = () => { setPaused(false); if (trig.state === "fired") { trig.state = "off"; trig.T = null; updTrig(); } };
+$("win").onchange = () => { win = parseFloat($("win").value); clampView(); yAx = null; };
+$("scale").onchange = () => { yAx = null; };
+$("yhold").onclick = () => { yHold = !yHold; $("yhold").setAttribute("aria-pressed", yHold); if (!yHold) yAx = null; };
+function zoom(f, frac) {
+  const nb = Math.round(win / dt), end = frozenEnd ?? seqEnd, start = end - nb;
+  if (frozenEnd === null) { win *= f; clampView(); yAx = null; return; }   // live: rechte Kante bleibt
+  const anchor = start + frac * nb, nb2 = Math.round(nb * f);
+  win = nb2 * dt; frozenEnd = Math.round(anchor + (1 - frac) * nb2); clampView(); yAx = null;
+}
+$("zin").onclick = () => zoom(1 / 1.5, 0.5);
+$("zout").onclick = () => zoom(1.5, 0.5);
+
+let geo = null;      // Geometrie der letzten Zeichnung
+function draw() {
+  requestAnimationFrame(draw);
+  if (gotAny) {
+    const age = (performance.now() - lastMsg) / 1000;
+    $("status").textContent = age < 2 ? (frozenEnd === null ? "live" : "angehalten") : "keine Daten seit " + age.toFixed(0) + " s";
+    $("status").className = age < 2 ? "" : "bad";
+  }
+  const d = window.devicePixelRatio || 1, W = cv.width, H = cv.height;
+  ctx.clearRect(0, 0, W, H);
+  if (!gotAny) return;
+  clampView();
+
+  const log = $("scale").value === "log";
+  const end = frozenEnd ?? seqEnd;
+  const nb = Math.max(2, Math.round(win / dt));
+  const start = end - nb;
+  const padL = 64 * d, padR = 10 * d, padT = 18 * d, padB = 24 * d;
+  const pw = W - padL - padR, ph = H - padT - padB;
+  const cols = Math.max(1, Math.floor(pw));
+  const xOf = s => padL + (s - start) / nb * pw;
+
+  const cMin = new Float32Array(cols), cMax = new Float32Array(cols), cAvg = new Float32Array(cols);
+  let lo = Infinity, hi = -Infinity, sum = 0, cnt = 0, peak = -Infinity;
+  for (let c = 0; c < cols; c++) {
+    const b0 = start + Math.floor(c * nb / cols), b1 = Math.max(b0 + 1, start + Math.floor((c + 1) * nb / cols));
+    let a = Infinity, b = -Infinity, s = 0, n = 0;
+    for (let q = b0; q < b1; q++) {
+      if (q < 0 || q >= seqEnd || q <= seqEnd - cap) continue;
+      const i = q % cap, x = mn[i];
+      if (x !== x) continue;
+      if (x < a) a = x; if (mx[i] > b) b = mx[i]; s += av[i]; n++;
+    }
+    cMin[c] = n ? a : NaN; cMax[c] = n ? b : NaN; cAvg[c] = n ? s / n : NaN;
+    if (n) { if (a < lo) lo = a; if (b > hi) hi = b; sum += s; cnt += n; if (b > peak) peak = b; }
+  }
+  let s1 = 0, n1 = 0;
+  for (let q = seqEnd - Math.round(1 / dt); q < seqEnd; q++) {
+    if (q < 0) continue; const v = av[q % cap]; if (v === v) { s1 += v; n1++; }
+  }
+  $("s1").textContent = n1 ? fmtA(s1 / n1) : "–";
+  $("sw").textContent = cnt ? fmtA(sum / cnt) : "–";
+  $("smax").textContent = cnt ? fmtA(peak) : "–";
+  $("sq").textContent = cnt ? fmtQ(sum * dt / 3600) : "–";
+  $("viewinfo").textContent = (frozenEnd === null ? "live, " : "angehalten, ") + "Fenster " + fmtS(nb * dt) +
+    ", " + fmtClock(tOf(start), win < 5) + " – " + fmtClock(tOf(end), win < 5);
+  if (!cnt) { geo = null; return; }
+
+  // Zielbereich aus den sichtbaren Daten
+  let t0, t1;
+  if (log) {
+    // Untergrenze: Mittellinie muss ganz sichtbar sein (halbes Minimum der Mittelwerte),
+    // dazu das 2-%-Quantil der positiven Minima der Hüllkurve. Minima <= 0 (Rauschen,
+    // Offset im kleinsten Bereich) zählen nicht. Grenzen auf 1-2-5-Schritte gerundet.
+    const pos = Array.from(cMin).filter(v => v > 0).sort((a, b) => a - b);
+    let minAvg = Infinity;
+    for (let c = 0; c < cols; c++) { const v = cAvg[c]; if (v > 0 && v < minAvg) minAvg = v; }
+    let loT = pos.length ? pos[Math.floor(pos.length * 0.02)] : Infinity;
+    if (minAvg < Infinity) loT = Math.min(loT, minAvg * 0.5);
+    if (!isFinite(loT)) loT = Math.max(hi, 1) / 1000;
+    const dec = v => Math.pow(10, Math.floor(Math.log10(v)));
+    const niceDown = v => { const p = dec(v), m = v / p; return (m >= 5 ? 5 : m >= 2 ? 2 : 1) * p; };
+    const niceUp = v => { const p = dec(v), m = v / p; return (m <= 1.0001 ? 1 : m <= 2 ? 2 : m <= 5 ? 5 : 10) * p; };
+    t0 = Math.log10(niceDown(Math.max(loT, 0.1)));
+    t1 = Math.log10(niceUp(Math.max(hi, Math.pow(10, t0) * 10, 1)));
+  } else {
+    const nice = v => { if (v <= 0) return 1; const p = Math.pow(10, Math.floor(Math.log10(v)));
+                        return [1, 2, 5, 10].map(f => f * p).find(f => f >= v); };
+    t0 = lo < 0 ? -nice(-lo) : 0; t1 = nice(hi * 1.02);
+  }
+  // Hysterese: sofort vergrößern, erst nach 3 s ruhig verkleinern
+  const nowMs = performance.now();
+  if (!yAx || yAx.log !== log) yAx = { log, y0: t0, y1: t1, shrinkSince: null };
+  else if (!yHold) {
+    if (t0 < yAx.y0 || t1 > yAx.y1) {
+      yAx.y0 = Math.min(yAx.y0, t0); yAx.y1 = Math.max(yAx.y1, t1); yAx.shrinkSince = null;
+    } else if (t0 > yAx.y0 || t1 < yAx.y1) {
+      if (yAx.shrinkSince === null) yAx.shrinkSince = nowMs;
+      else if (nowMs - yAx.shrinkSince > 3000) { yAx.y0 = t0; yAx.y1 = t1; yAx.shrinkSince = null; }
+    } else yAx.shrinkSince = null;
+  }
+  const y0 = yAx.y0, y1 = yAx.y1;
+  const Y = v => {
+    const t = log ? (Math.log10(Math.max(v, 0.1)) - y0) / (y1 - y0) : (v - y0) / (y1 - y0);
+    return padT + ph * (1 - Math.min(1, Math.max(0, t)));
+  };
+
+  // Wachphasen-Bänder (aus der Aufnahme) und laufende Wachphase
+  const bands = wakes.map(w => [seqOf(w.t0), seqOf(w.t1)]);
+  if (status.wake_rec && status.wake_since) bands.push([seqOf(status.wake_since), seqEnd]);
+  for (const [a, b] of bands) {
+    if (b < start || a > end) continue;
+    const x0 = Math.max(padL, xOf(a)), x1 = Math.min(padL + pw, xOf(b));
+    ctx.fillStyle = css("--wake"); ctx.fillRect(x0, padT, Math.max(1, x1 - x0), ph);
+    ctx.fillStyle = css("--wake-edge"); ctx.fillRect(x0, padT - 6 * d, Math.max(1, x1 - x0), 4 * d);
+  }
+  // Auswahl
+  if (sel) {
+    const x0 = Math.max(padL, xOf(sel.a)), x1 = Math.min(padL + pw, xOf(sel.b));
+    if (x1 > x0) { ctx.fillStyle = css("--sel"); ctx.fillRect(x0, padT, x1 - x0, ph);
+      ctx.fillStyle = css("--sel-edge"); ctx.fillRect(x0, padT, d, ph); ctx.fillRect(x1 - d, padT, d, ph); }
+  }
+
+  ctx.font = (11 * d) + "px system-ui, sans-serif";
+  ctx.fillStyle = css("--muted"); ctx.strokeStyle = css("--grid"); ctx.lineWidth = d;
+  ctx.textAlign = "right"; ctx.textBaseline = "middle";
+  const ticks = [];
+  if (log) {
+    const fs = y1 - y0 < 2.5 ? [1, 2, 5] : [1];      // bei wenigen Dekaden Zwischenstriche
+    for (let e = Math.floor(y0); e <= Math.ceil(y1); e++)
+      for (const f of fs) { const v = f * Math.pow(10, e), l = Math.log10(v);
+                            if (l >= y0 - 1e-9 && l <= y1 + 1e-9) ticks.push(v); }
+  }
+  else {
+    const raw = (y1 - y0) / 5, p = Math.pow(10, Math.floor(Math.log10(raw)));
+    const st = [1, 2, 5, 10].map(f => f * p).find(f => f >= raw);
+    for (let v = Math.ceil(y0 / st) * st; v <= y1; v += st) ticks.push(v);
+  }
+  for (const v of ticks) {
+    const y = Math.round(Y(v)) + 0.5;
+    ctx.beginPath(); ctx.moveTo(padL, y); ctx.lineTo(W - padR, y); ctx.stroke();
+    ctx.fillText(fmtA(v), padL - 6 * d, y);
+  }
+  // x-Achse: Uhrzeit
+  const span = nb * dt;
+  const steps = [0.001, 0.002, 0.005, 0.01, 0.02, 0.05, 0.1, 0.2, 0.5, 1, 2, 5, 10, 15, 30, 60];
+  const xst = steps.find(s => span / s <= 7) || 60;
+  const tS = tOf(start), tE = tOf(end);
+  ctx.textBaseline = "top";
+  for (let t = Math.ceil(tS / xst) * xst; t <= tE + 1e-9; t += xst) {
+    const x = xOf(seqOf(t));
+    ctx.beginPath(); ctx.moveTo(x, padT); ctx.lineTo(x, padT + ph); ctx.stroke();
+    ctx.textAlign = x > W - 40 * d ? "right" : "center";
+    ctx.fillText(fmtClock(t, xst < 1), x, padT + ph + 4 * d);
+  }
+  // Hüllkurve und Mittel
+  ctx.fillStyle = css("--env");
+  for (let c = 0; c < cols; c++) {
+    if (cMin[c] !== cMin[c]) continue;
+    const ya = Y(cMax[c]), yb = Y(cMin[c]);
+    ctx.fillRect(padL + c, ya, 1, Math.max(d, yb - ya));
+  }
+  ctx.strokeStyle = css("--line"); ctx.lineWidth = 1.5 * d; ctx.beginPath();
+  let pen = false;
+  for (let c = 0; c < cols; c++) {
+    const v = cAvg[c];
+    if (v !== v) { pen = false; continue; }
+    const x = padL + c + 0.5, y = Y(v);
+    if (pen) ctx.lineTo(x, y); else { ctx.moveTo(x, y); pen = true; }
+  }
+  ctx.stroke();
+  // Trigger: Linie und Schwelle
+  if (trig.T !== null && trig.T >= start && trig.T <= end) {
+    const x = xOf(trig.T); ctx.strokeStyle = css("--trig"); ctx.lineWidth = d;
+    ctx.setLineDash([4 * d, 3 * d]); ctx.beginPath(); ctx.moveTo(x, padT); ctx.lineTo(x, padT + ph); ctx.stroke();
+    ctx.setLineDash([]);
+  }
+  if (trig.state === "armed" || trig.state === "running") {
+    const y = Y(parseFloat($("trigLevel").value) * 1000);
+    ctx.strokeStyle = css("--trig"); ctx.lineWidth = d; ctx.setLineDash([2 * d, 4 * d]);
+    ctx.beginPath(); ctx.moveTo(padL, y); ctx.lineTo(padL + pw, y); ctx.stroke(); ctx.setLineDash([]);
+  }
+  geo = { padL, pw, cols, cMin, cMax, cAvg, start, nb, d, end };
+  updSel();
+}
+requestAnimationFrame(draw);
+
+// ---------- Auswahl: Statistik
+function rangeStats(a, b) {
+  a = Math.max(Math.round(a), seqEnd - cap + 1, 0); b = Math.min(Math.round(b), seqEnd);
+  let s = 0, n = 0, lo = Infinity, hi = -Infinity;
+  for (let q = a; q < b; q++) {
+    const i = q % cap; if (mn[i] !== mn[i]) continue;
+    s += av[i]; n++; if (mn[i] < lo) lo = mn[i]; if (mx[i] > hi) hi = mx[i];
+  }
+  return { a, b, n, mean: n ? s / n : NaN, lo, hi, q: s * dt / 3600, dur: (b - a) * dt };
+}
+let selShown = "";
+function updSel() {
+  const box = $("selbox");
+  if (!sel || sel.b - sel.a < 1) { box.style.display = "none"; selShown = ""; return; }
+  const r = rangeStats(sel.a, sel.b);
+  const txt = `<b>${fmtS(r.dur)}</b> ab ${fmtClock(tOf(r.a), true)} · Mittel <b>${fmtA(r.mean)}</b> · ` +
+              `Min ${fmtA(r.lo)} · Spitze <b>${fmtA(r.hi)}</b> · Ladung <b>${fmtQ(r.q)}</b>` +
+              (r.n < r.b - r.a ? ` <span class="hint">(${Math.round(100 * r.n / Math.max(1, r.b - r.a))} % Daten)</span>` : "");
+  if (txt !== selShown) { $("seltext").innerHTML = txt; selShown = txt; }
+  box.style.display = "block";
+}
+$("selzoom").onclick = () => { if (sel) { const m = (sel.b - sel.a) * 0.05; showRange(sel.a - m, sel.b + m); } };
+$("selclear").onclick = () => { sel = null; };
+document.addEventListener("keydown", e => { if (e.key === "Escape") sel = null; });
+
+// ---------- Maus / Touch
+const cur = $("cursor");
+function seqAtX(clientX) {
+  const r = cv.getBoundingClientRect();
+  const x = (clientX - r.left) * geo.d - geo.padL;
+  return { s: geo.start + x / geo.pw * geo.nb, frac: Math.min(1, Math.max(0, x / geo.pw)), c: Math.floor(x) };
+}
+let drag = null;
+cv.addEventListener("pointerdown", e => {
+  if (!geo || e.button !== 0) return;
+  cv.setPointerCapture(e.pointerId);
+  drag = { s0: seqAtX(e.clientX).s, moved: false };
+});
+cv.addEventListener("pointermove", e => {
+  if (!geo) return;
+  const p = seqAtX(e.clientX);
+  if (drag) {
+    if (Math.abs(p.s - drag.s0) * geo.pw / geo.nb > 3 * geo.d) {
+      if (!drag.moved && frozenEnd === null) setPaused(true);
+      drag.moved = true;
+      sel = { a: Math.min(drag.s0, p.s), b: Math.max(drag.s0, p.s) };
+    }
+  }
+  const r = cv.getBoundingClientRect(), c = p.c;
+  if (c < 0 || c >= geo.cols || geo.cAvg[c] !== geo.cAvg[c]) { cur.style.display = "none"; return; }
+  cur.textContent = fmtClock(tOf(p.s), true) + "   Mittel " + fmtA(geo.cAvg[c]) +
+                    "   Min " + fmtA(geo.cMin[c]) + "   Max " + fmtA(geo.cMax[c]);
+  cur.style.display = "block";
+  cur.style.left = Math.min(e.clientX - r.left + 12, r.width - cur.offsetWidth - 4) + "px";
+  cur.style.top = (e.clientY - r.top + 12) + "px";
+});
+cv.addEventListener("pointerup", () => { drag = null; });
+cv.addEventListener("pointerleave", () => { cur.style.display = "none"; });
+cv.addEventListener("dblclick", () => { sel = null; setPaused(false); });
+cv.addEventListener("wheel", e => {
+  if (!geo) return;
+  e.preventDefault();
+  const p = seqAtX(e.clientX);
+  if (e.shiftKey || Math.abs(e.deltaX) > Math.abs(e.deltaY)) {          // verschieben
+    if (frozenEnd === null) setPaused(true);
+    const dpx = (e.shiftKey ? e.deltaY : e.deltaX);
+    frozenEnd = Math.round(frozenEnd + dpx / geo.pw * geo.nb); clampView();
+  } else {
+    zoom(Math.pow(1.0015, e.deltaY), p.frac);
+  }
+}, { passive: false });
+
+// ---------- Export
+function exportRange() {
+  if (sel) return [Math.round(sel.a), Math.round(sel.b)];
+  const end = frozenEnd ?? seqEnd; return [end - Math.round(win / dt), end];
+}
+function download(name, blob) {
+  const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = name;
+  document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+}
+function stamp(t) { return new Date(t * 1000).toISOString().replace(/[:]/g, "-").replace(/\..*/, ""); }
+$("csv").onclick = () => {
+  if (!gotAny) return;
+  let [a, b] = exportRange(); a = Math.max(a, seqEnd - cap + 1, 0); b = Math.min(b, seqEnd);
+  const lines = ["time_utc,t_s,min_uA,max_uA,mean_uA"];
+  for (let q = a; q < b; q++) {
+    const i = q % cap; if (mn[i] !== mn[i]) continue;
+    const t = tOf(q);
+    lines.push(new Date(t * 1000).toISOString() + "," + ((q - a) * dt).toFixed(3) + "," +
+               mn[i].toPrecision(6) + "," + mx[i].toPrecision(6) + "," + av[i].toPrecision(6));
+  }
+  download("ppk2_live_" + stamp(tOf(a)) + ".csv", new Blob([lines.join("\n") + "\n"], { type: "text/csv" }));
+};
+$("png").onclick = () => {
+  if (!geo) return;
+  const d = geo.d, head = 34 * d, out = document.createElement("canvas");
+  out.width = cv.width; out.height = cv.height + head;
+  const o = out.getContext("2d");
+  o.fillStyle = css("--bg"); o.fillRect(0, 0, out.width, out.height);
+  o.drawImage(cv, 0, head);
+  const [a, b] = exportRange(), r = rangeStats(a, b);
+  o.fillStyle = css("--fg"); o.font = "600 " + (13 * d) + "px system-ui, sans-serif"; o.textBaseline = "top";
+  o.fillText("PPK2 · " + new Date(tOf(a) * 1000).toLocaleString("de-DE") + " · " + fmtS(r.dur) +
+             " · Mittel " + fmtA(r.mean) + " · Spitze " + fmtA(r.hi) + " · Ladung " + fmtQ(r.q) +
+             (sel ? " (Auswahl)" : ""), 12 * d, 10 * d);
+  out.toBlob(bl => download("ppk2_live_" + stamp(tOf(a)) + ".png", bl), "image/png");
+};
+</script>
+</body>
+</html>

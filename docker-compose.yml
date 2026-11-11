@@ -1,0 +1,18 @@
+services:
+  ppk2-logger:
+    # Fertiges Image (Raspberry Pi 64 Bit und x86), kein lokaler Build nötig:
+    image: ghcr.io/docbigs-lab/ppk2-longterm-logger:latest
+    # Oder selbst bauen: die Zeile "image" auskommentieren und die nächste einkommentieren
+    # build: .
+    container_name: ppk2-logger
+    restart: unless-stopped
+    env_file:
+      - .env
+    volumes:
+      - ./data:/data
+      - /dev:/dev                # damit auch ein neu enumeriertes ttyACM funktioniert
+    device_cgroup_rules:
+      - "c 166:* rmw"            # 166 = ttyACM
+    # Live-Ansicht im Browser: in .env LIVE_PORT=8080 setzen und hier einkommentieren
+    # ports:
+    #   - "8080:8080"

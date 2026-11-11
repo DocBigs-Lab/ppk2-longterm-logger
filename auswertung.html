@@ -1,0 +1,627 @@
+<!doctype html>
+<!-- SPDX-License-Identifier: GPL-2.0-only -->
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PPK2 Auswertung</title>
+<link rel="icon" href="data:,">
+<style>
+  :root {
+    --bg: #fcfcfb; --fg: #0b0b0b; --muted: #52514e; --grid: #e4e3df; --panel: #f3f2ef;
+    --c1: #2a78d6; --c1env: #2a78d62e; --c2: #eb6834; --warn: #c0392b;
+    --pre: #52514e14; --act: #eb683420; --sel: #7a5af520; --sel-edge: #7a5af5;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #141414; --fg: #ececea; --muted: #a3a29e; --grid: #2b2b29; --panel: #1d1d1c;
+      --c1: #5b9be6; --c1env: #5b9be638; --c2: #f0875a; --warn: #e5735f;
+      --pre: #ffffff10; --act: #f0875a26; --sel: #9d85ff2a; --sel-edge: #9d85ff;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--fg);
+         font: 14px/1.4 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  header { display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; padding: 10px 16px 4px; }
+  h1 { font-size: 16px; margin: 0; font-weight: 600; }
+  nav a { color: var(--muted); text-decoration: none; padding: 3px 8px; border-radius: 6px; }
+  nav a.on { color: var(--fg); background: var(--panel); }
+  .row { display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; padding: 4px 16px; }
+  .ctl { display: flex; gap: 6px; align-items: center; color: var(--muted); }
+  select, button, input { font: inherit; color: var(--fg); background: var(--panel);
+    border: 1px solid var(--grid); border-radius: 6px; padding: 3px 8px; }
+  input[type=number] { width: 5.5em; }
+  button { cursor: pointer; }
+  #state { color: var(--muted); margin-left: auto; }
+  #state.bad { color: var(--warn); }
+  section { padding: 4px 16px 8px; }
+  h2 { font-size: 12px; font-weight: 600; color: var(--muted); margin: 10px 0 6px;
+       text-transform: uppercase; letter-spacing: .04em; }
+  .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 8px; }
+  .stat { background: var(--panel); border-radius: 8px; padding: 6px 10px; }
+  .stat b { display: block; font-size: 18px; font-variant-numeric: tabular-nums; }
+  .stat span, .stat small { color: var(--muted); font-size: 12px; }
+  .chart { position: relative; height: 260px; }
+  .chart.tall { height: 320px; }
+  .chart canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
+  .tip { position: absolute; pointer-events: none; background: var(--panel); border: 1px solid var(--grid);
+         border-radius: 6px; padding: 2px 6px; font-size: 12px; display: none; white-space: nowrap; z-index: 2; }
+  .legend { display: flex; gap: 14px; color: var(--muted); font-size: 12px; margin: 2px 0 4px; flex-wrap: wrap; }
+  .legend i { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 4px; vertical-align: -1px; }
+  table { border-collapse: collapse; width: 100%; font-variant-numeric: tabular-nums; }
+  th, td { text-align: right; padding: 4px 8px; border-bottom: 1px solid var(--grid); white-space: nowrap; }
+  th:first-child, td:first-child { text-align: left; }
+  th { color: var(--muted); font-weight: 600; font-size: 12px; }
+  tr.click { cursor: pointer; }
+  tr.click:hover td, tr.sel td { background: var(--panel); }
+  .scroll { overflow-x: auto; max-height: 420px; overflow-y: auto; }
+  .hint { color: var(--muted); font-size: 12px; }
+  #detail { display: none; }
+  #dsel { background: var(--panel); border: 1px solid var(--sel-edge); border-radius: 8px;
+          padding: 6px 10px; margin: 6px 0; display: none; }
+  .two { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  @media (max-width: 900px) { .two { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+<header>
+  <h1>PPK2</h1>
+  <nav><a href="./">Live</a><a href="auswertung" class="on">Auswertung</a></nav>
+  <label class="ctl">Zeitraum
+    <select id="range">
+      <option value="24" selected>letzte 24 h</option><option value="48">letzte 48 h</option>
+      <option value="168">letzte 7 Tage</option><option value="720">letzte 30 Tage</option>
+      <option value="von">ab Zeitpunkt …</option>
+    </select>
+  </label>
+  <input id="von" type="datetime-local" style="display:none">
+  <button id="go">Auswerten</button>
+  <span id="state"></span>
+</header>
+<div class="row">
+  <label class="ctl">aktiv ab <input id="aktiv" type="number" min="0.1" step="0.1" value="5"> mA</label>
+  <label class="ctl">teuer ab <input id="redraw" type="number" min="1" step="1" value="120"> µAh</label>
+  <label class="ctl">Akku <input id="mah" type="number" min="1" step="100" value="3000"> mAh</label>
+  <label class="ctl">nutzbar <input id="nutzbar" type="number" min="1" max="100" step="5" value="80"> %</label>
+</div>
+
+<section>
+  <h2 id="periodH">Übersicht</h2>
+  <div class="stats">
+    <div class="stat"><span>Ruhestrom (Mittel)</span><b id="kq">–</b><small id="kqs"></small></div>
+    <div class="stat"><span>Verbrauch pro Tag</span><b id="kd">–</b><small id="kds"></small></div>
+    <div class="stat"><span>Anteil Wachphasen</span><b id="kw">–</b><small id="kws"></small></div>
+    <div class="stat"><span>Laufzeit geschätzt</span><b id="kl">–</b><small id="kls"></small></div>
+    <div class="stat"><span>Wachphasen</span><b id="kn">–</b><small id="kns"></small></div>
+  </div>
+</section>
+
+<section>
+  <h2>Verlauf</h2>
+  <div class="legend"><span><i style="background:var(--c1)"></i>Mittel je <span id="bucketS">1 min</span></span>
+    <span><i style="background:var(--c1env)"></i>Maximum (1-s-Intervalle)</span>
+    <span><i style="background:var(--c2)"></i>Wachphase</span>
+    <span>Ziehen: Zoom · Doppelklick: alles</span></div>
+  <div class="chart tall" id="chV"><canvas></canvas><div class="tip"></div></div>
+</section>
+
+<section class="two">
+  <div>
+    <h2>Ruhestrom pro Stunde</h2>
+    <div class="chart" id="chH"><canvas></canvas><div class="tip"></div></div>
+  </div>
+  <div>
+    <h2>Ladung pro Wachphase</h2>
+    <div class="legend"><span><i style="background:var(--c1)"></i>teuer</span><span><i style="background:var(--c2)"></i>günstig</span>
+      <span>Klick auf Punkt: Wachphase öffnen</span></div>
+    <div class="chart" id="chW"><canvas></canvas><div class="tip"></div></div>
+  </div>
+</section>
+
+<section id="detail">
+  <h2 id="dH">Wachphase</h2>
+  <div class="stats" id="dStats"></div>
+  <div class="row" style="padding:6px 0">
+    <label class="ctl">Skala <select id="dScale"><option value="log" selected>log</option><option value="lin">linear</option></select></label>
+    <button id="dAll">Ganze Wachphase</button>
+    <button id="dCsv">CSV</button><button id="dPng">PNG</button>
+    <button id="dClose">Schließen</button>
+    <span class="hint">Ziehen: Bereich ausmessen (exakt, 10 µs) · Mausrad: Zoom · Shift+Mausrad: verschieben · Doppelklick: alles</span>
+  </div>
+  <div id="dsel"><span id="dselT"></span> <button id="dselZoom">Zoom auf Auswahl</button></div>
+  <div class="chart tall" id="chD"><canvas></canvas><div class="tip"></div></div>
+  <div class="hint" id="dInfo"></div>
+</section>
+
+<section class="two">
+  <div>
+    <h2>Tage</h2>
+    <div class="scroll" id="tDays"><span class="hint">–</span></div>
+  </div>
+  <div>
+    <h2>Wachphasen</h2>
+    <div class="scroll" id="tWakes"><span class="hint">–</span></div>
+  </div>
+</section>
+
+<script>
+"use strict";
+const $ = id => document.getElementById(id);
+const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+let R = null, rec = [], zoomV = null, detail = null;
+
+// ---------- Formatierung
+function fmtA(uA) {
+  if (uA === null || uA === undefined || !isFinite(uA)) return "–";
+  const a = Math.abs(uA);
+  if (a >= 1000) return (uA / 1000).toFixed(a >= 1e5 ? 0 : a >= 1e4 ? 1 : 2) + " mA";
+  if (a >= 1) return uA.toFixed(a >= 100 ? 0 : a >= 10 ? 1 : 2) + " µA";
+  return (uA * 1000).toFixed(0) + " nA";
+}
+function fmtQ(uAh) {
+  if (uAh === null || uAh === undefined || !isFinite(uAh)) return "–";
+  return Math.abs(uAh) >= 1000 ? (uAh / 1000).toFixed(2) + " mAh" : uAh.toFixed(uAh < 10 ? 2 : 1) + " µAh";
+}
+function fmtS(s) {
+  if (!isFinite(s)) return "–";
+  if (s < 1e-3) return (s * 1e6).toFixed(0) + " µs";
+  if (s < 1) return (s * 1000).toFixed(s < 0.01 ? 2 : 1) + " ms";
+  if (s < 60) return s.toFixed(s < 10 ? 2 : 1) + " s";
+  if (s < 3600) return Math.floor(s / 60) + " min " + Math.round(s % 60) + " s";
+  return (s / 3600).toFixed(1) + " h";
+}
+const p2 = v => String(v).padStart(2, "0");
+// relative Zeit zum Trigger; Nachkommastellen passend zur Rasterweite
+function fmtRel(t, step) {
+  if (Math.abs(t) < step / 1000) return "0";
+  const sign = t > 0 ? "+" : "−", a = Math.abs(t);
+  if (step >= 1) return sign + fmtS(a);
+  const dec = Math.min(6, Math.max(0, Math.ceil(-Math.log10(step) - 1e-9)));
+  return sign + a.toFixed(dec) + " s";
+}
+function fmtT(t, mode) {           // t in Unix-Sekunden, Ortszeit des Browsers
+  const d = new Date(t * 1000);
+  const day = p2(d.getDate()) + "." + p2(d.getMonth() + 1) + ".";
+  const hm = p2(d.getHours()) + ":" + p2(d.getMinutes());
+  if (mode === "day") return day;
+  if (mode === "dayhm") return day + " " + hm;
+  if (mode === "hms") return hm + ":" + p2(d.getSeconds());
+  return hm;
+}
+
+// ---------- Diagramm-Helfer
+function niceLin(lo, hi) {
+  const span = hi - lo || 1, raw = span / 5, p = Math.pow(10, Math.floor(Math.log10(raw)));
+  const st = [1, 2, 5, 10].map(f => f * p).find(f => f >= raw);
+  return { y0: Math.floor(lo / st) * st, y1: Math.ceil(hi / st) * st, step: st };
+}
+function niceLog(lo, hi) {
+  const dec = v => Math.pow(10, Math.floor(Math.log10(v)));
+  const down = v => { const p = dec(v), m = v / p; return (m >= 5 ? 5 : m >= 2 ? 2 : 1) * p; };
+  const up = v => { const p = dec(v), m = v / p; return (m <= 1.0001 ? 1 : m <= 2 ? 2 : m <= 5 ? 5 : 10) * p; };
+  lo = Math.max(lo, 0.1); hi = Math.max(hi, lo * 10);
+  return { y0: Math.log10(down(lo)), y1: Math.log10(up(hi)) };
+}
+function timeTicks(x0, x1, rel) {
+  const span = x1 - x0;
+  const steps = rel ? [1e-5, 2e-5, 5e-5, 1e-4, 2e-4, 5e-4, 1e-3, 2e-3, 5e-3, 0.01, 0.02, 0.05, 0.1, 0.2, 0.5, 1, 2, 5, 10, 20, 30, 60]
+                    : [1, 2, 5, 10, 30, 60, 120, 300, 600, 900, 1800, 3600, 7200, 10800, 21600, 43200, 86400, 172800, 604800];
+  const st = steps.find(s => span / s <= 8) || steps[steps.length - 1];
+  const out = [];
+  if (rel) { for (let t = Math.ceil(x0 / st) * st; t <= x1 + 1e-12; t += st) out.push(t); }
+  else {
+    const off = -new Date().getTimezoneOffset() * 60;            // auf Ortszeit-Raster legen
+    for (let t = Math.ceil((x0 + off) / st) * st - off; t <= x1; t += st) out.push(t);
+  }
+  return { ticks: out, step: st };
+}
+function setupCanvas(box) {
+  const cv = box.querySelector("canvas"), r = cv.getBoundingClientRect(), d = window.devicePixelRatio || 1;
+  cv.width = Math.round(r.width * d); cv.height = Math.round(r.height * d);
+  return { cv, ctx: cv.getContext("2d"), d, W: cv.width, H: cv.height };
+}
+// Achsen und Gitter; gibt Umrechnungen zurück
+function axes(g, o) {
+  const { ctx, d, W, H } = g;
+  const padL = 64 * d, padR = 10 * d, padT = 8 * d, padB = (o.twoLine ? 34 : 22) * d;
+  const pw = W - padL - padR, ph = H - padT - padB;
+  ctx.clearRect(0, 0, W, H);
+  const X = x => padL + (x - o.x0) / (o.x1 - o.x0) * pw;
+  const Y = v => {
+    const t = o.log ? (Math.log10(Math.max(v, 1e-9)) - o.y0) / (o.y1 - o.y0) : (v - o.y0) / (o.y1 - o.y0);
+    return padT + ph * (1 - Math.min(1, Math.max(0, t)));
+  };
+  ctx.font = (11 * d) + "px system-ui, sans-serif"; ctx.lineWidth = d;
+  ctx.strokeStyle = css("--grid"); ctx.fillStyle = css("--muted");
+  ctx.textAlign = "right"; ctx.textBaseline = "middle";
+  const yt = [];
+  if (o.log) {
+    const fs = o.y1 - o.y0 < 2.5 ? [1, 2, 5] : [1];
+    for (let e = Math.floor(o.y0); e <= Math.ceil(o.y1); e++)
+      for (const f of fs) { const v = f * Math.pow(10, e), l = Math.log10(v); if (l >= o.y0 - 1e-9 && l <= o.y1 + 1e-9) yt.push(v); }
+  } else { for (let v = o.y0; v <= o.y1 + o.step / 1e6; v += o.step) yt.push(v); }
+  for (const v of yt) {
+    const y = Math.round(Y(v)) + 0.5;
+    ctx.beginPath(); ctx.moveTo(padL, y); ctx.lineTo(padL + pw, y); ctx.stroke();
+    ctx.fillText(o.yfmt(v), padL - 6 * d, y);
+  }
+  const { ticks, step } = timeTicks(o.x0, o.x1, o.rel);
+  ctx.textBaseline = "top";
+  let lastDay = "";
+  for (const t of ticks) {
+    const x = X(t);
+    ctx.beginPath(); ctx.moveTo(x, padT); ctx.lineTo(x, padT + ph); ctx.stroke();
+    ctx.textAlign = x > padL + pw - 30 * d ? "right" : "center";
+    if (o.rel) ctx.fillText(fmtRel(t, step), x, padT + ph + 4 * d);
+    else if (step >= 86400) ctx.fillText(fmtT(t, "day"), x, padT + ph + 4 * d);
+    else {
+      ctx.fillText(step < 60 ? fmtT(t, "hms") : fmtT(t), x, padT + ph + 4 * d);
+      const day = fmtT(t, "day");
+      if (o.twoLine && day !== lastDay) { ctx.fillText(day, x, padT + ph + 17 * d); lastDay = day; }
+    }
+  }
+  return { X, Y, padL, padT, pw, ph, inv: px => o.x0 + (px - padL) / pw * (o.x1 - o.x0) };
+}
+function tip(box, html, e) {
+  const t = box.querySelector(".tip"), r = box.getBoundingClientRect();
+  if (!html) { t.style.display = "none"; return; }
+  t.innerHTML = html; t.style.display = "block";
+  t.style.left = Math.min(e.clientX - r.left + 12, r.width - t.offsetWidth - 4) + "px";
+  t.style.top = (e.clientY - r.top + 12) + "px";
+}
+
+// ---------- Laden
+function params() {
+  const q = new URLSearchParams();
+  const r = $("range").value;
+  if (r === "von") {
+    if (!$("von").value) return null;
+    q.set("von", new Date($("von").value).toISOString().slice(0, 16));
+  } else q.set("hours", r);
+  q.set("tz", String(-new Date().getTimezoneOffset() / 60));
+  q.set("aktiv", String(parseFloat($("aktiv").value) * 1000));
+  q.set("redraw-uah", $("redraw").value);
+  q.set("mah", $("mah").value);
+  q.set("nutzbar", String(parseFloat($("nutzbar").value) / 100));
+  return q;
+}
+$("range").onchange = () => { $("von").style.display = $("range").value === "von" ? "" : "none"; if ($("range").value !== "von") load(); };
+$("go").onclick = load;
+async function load() {
+  const q = params(); if (!q) return;
+  $("state").textContent = "rechnet …"; $("state").className = "";
+  const t0 = performance.now();
+  try {
+    const [ra, rw] = await Promise.all([fetch("api/analyse?" + q), fetch("wakes?n=500")]);
+    const j = await ra.json(), w = await rw.json();
+    if (j.error) { $("state").textContent = j.error; $("state").className = "bad"; return; }
+    R = j; zoomV = null;
+    rec = (w.wakes || []).map(x => Object.assign(x, { t0: Date.parse(x.trigger_utc) / 1000 }))
+                         .filter(x => x.t0 >= R.start - 60 && x.t0 <= R.end + 60);
+    $("state").textContent = "fertig (" + ((performance.now() - t0) / 1000).toFixed(1) + " s)";
+    render();
+  } catch (e) { $("state").textContent = "Fehler: " + e; $("state").className = "bad"; }
+}
+
+// ---------- Darstellung
+function render() {
+  if (!R) return;
+  const P = R.params;
+  $("periodH").textContent = "Übersicht " + fmtT(R.start, "dayhm") + " – " + fmtT(R.end, "dayhm") +
+    " (" + R.measured_h.toFixed(1) + " h gemessen)";
+  $("kq").textContent = fmtA(R.quiet.mean_uA);
+  $("kqs").textContent = "Median " + fmtA(R.quiet.median_uA) + ", P5–P95 " + fmtA(R.quiet.p5_uA) + " – " + fmtA(R.quiet.p95_uA);
+  $("kd").textContent = R.per_day_mAh.toFixed(2) + " mAh";
+  $("kds").textContent = "Schnitt " + fmtA(R.avg_uA) + ", gesamt " + fmtQ(R.total_uAh);
+  $("kw").textContent = R.total_uAh ? Math.round(R.wake_uAh / R.total_uAh * 100) + " %" : "–";
+  $("kws").textContent = fmtQ(R.wake_uAh) + " in Wachphasen";
+  $("kl").textContent = R.days ? Math.round(R.days) + " Tage" : "–";
+  $("kls").textContent = P.mah + " mAh × " + Math.round(P.nutzbar * 100) + " %, ohne Selbstentladung";
+  const big = R.wakes.filter(w => w[2] >= P.redraw_uAh), small = R.wakes.filter(w => w[2] < P.redraw_uAh);
+  const avg = (l, i) => l.length ? l.reduce((a, w) => a + w[i], 0) / l.length : NaN;
+  $("kn").textContent = R.wakes.length;
+  $("kns").textContent = big.length + " teuer (Ø " + fmtQ(avg(big, 2)) + ", " + fmtS(avg(big, 1)) + "), " +
+                          small.length + " günstig" + (small.length ? " (Ø " + fmtQ(avg(small, 2)) + ")" : "");
+  $("bucketS").textContent = fmtS(R.series_bucket_s);
+  drawV(); drawH(); drawW(); tables();
+}
+
+// Verlauf (log): Mittel je Bucket + Maximum als Fläche, Wachphasen als Punkte oben
+const boxV = $("chV");
+let geoV = null;
+function drawV() {
+  const g = setupCanvas(boxV), s = R.series;
+  const x0 = zoomV ? zoomV[0] : R.start, x1 = zoomV ? zoomV[1] : R.end;
+  const vis = s.filter(p => p[0] >= x0 - R.series_bucket_s && p[0] <= x1);
+  let lo = Infinity, hi = 1;
+  for (const p of vis) { if (p[1] > 0 && p[1] < lo) lo = p[1]; if (p[2] > hi) hi = p[2]; }
+  if (!isFinite(lo)) lo = 1;
+  const ax = niceLog(lo * 0.5, hi);
+  const o = { x0, x1, log: true, y0: ax.y0, y1: ax.y1, yfmt: fmtA, twoLine: x1 - x0 > 86400 * 0.9 && x1 - x0 < 86400 * 10 };
+  const A = axes(g, o), { ctx, d } = g;
+  ctx.fillStyle = css("--c1env");
+  const bw = Math.max(1, A.pw * R.series_bucket_s / (x1 - x0));
+  for (const p of vis) {
+    if (p[1] === null) continue;
+    const x = A.X(p[0]), ya = A.Y(p[2]), yb = A.Y(p[1]);
+    ctx.fillRect(x, ya, bw, Math.max(d, yb - ya));
+  }
+  ctx.strokeStyle = css("--c1"); ctx.lineWidth = 1.5 * d; ctx.beginPath();
+  let pen = false, prev = null;
+  for (const p of vis) {
+    if (p[1] === null || (prev !== null && p[0] - prev > R.series_bucket_s * 3)) { pen = false; }
+    if (p[1] === null) { prev = null; continue; }
+    const x = A.X(p[0] + R.series_bucket_s / 2), y = A.Y(p[1]);
+    if (pen) ctx.lineTo(x, y); else { ctx.moveTo(x, y); pen = true; }
+    prev = p[0];
+  }
+  ctx.stroke();
+  ctx.fillStyle = css("--c2");
+  for (const w of R.wakes) {
+    if (w[0] < x0 || w[0] > x1) continue;
+    ctx.beginPath(); ctx.arc(A.X(w[0]), A.padT + 6 * d, 3 * d, 0, 7); ctx.fill();
+  }
+  if (selV) {
+    const xa = A.X(Math.min(selV[0], selV[1])), xb = A.X(Math.max(selV[0], selV[1]));
+    ctx.fillStyle = css("--sel"); ctx.fillRect(xa, A.padT, xb - xa, A.ph);
+  }
+  geoV = { A, d, vis };
+}
+let selV = null;
+boxV.addEventListener("pointerdown", e => {
+  if (!geoV || e.button !== 0) return;
+  boxV.setPointerCapture(e.pointerId);
+  const r = boxV.getBoundingClientRect(), t = geoV.A.inv((e.clientX - r.left) * geoV.d);
+  selV = [t, t];
+});
+boxV.addEventListener("pointermove", e => {
+  if (!geoV) return;
+  const r = boxV.getBoundingClientRect(), t = geoV.A.inv((e.clientX - r.left) * geoV.d);
+  if (selV) { selV[1] = t; drawV(); }
+  const p = geoV.vis.reduce((b, q) => Math.abs(q[0] + R.series_bucket_s / 2 - t) < Math.abs(b[0] + R.series_bucket_s / 2 - t) ? q : b, geoV.vis[0] || [0]);
+  if (!p || p.length < 3) return tip(boxV, null);
+  tip(boxV, fmtT(p[0], "dayhm") + " · Mittel " + fmtA(p[1]) + " · Max " + fmtA(p[2]), e);
+});
+boxV.addEventListener("pointerup", () => {
+  if (selV && Math.abs(selV[1] - selV[0]) > (R.end - R.start) / 2000) zoomV = [Math.min(...selV), Math.max(...selV)];
+  selV = null; if (R) drawV();
+});
+boxV.addEventListener("pointerleave", () => tip(boxV, null));
+boxV.addEventListener("dblclick", () => { zoomV = null; drawV(); });
+
+// Ruhestrom pro Stunde (linear)
+const boxH = $("chH");
+let geoH = null;
+function drawH() {
+  const g = setupCanvas(boxH), h = R.hourly;
+  const hi = Math.max(1, ...h.map(p => p[1]));
+  const ax = niceLin(0, hi * 1.1);
+  const A = axes(g, { x0: R.start, x1: R.end, log: false, y0: 0, y1: ax.y1, step: ax.step, yfmt: fmtA });
+  const { ctx, d } = g;
+  ctx.strokeStyle = css("--c1"); ctx.fillStyle = css("--c1"); ctx.lineWidth = 2 * d; ctx.beginPath();
+  h.forEach((p, i) => { const x = A.X(p[0] + 1800), y = A.Y(p[1]); i ? ctx.lineTo(x, y) : ctx.moveTo(x, y); });
+  ctx.stroke();
+  for (const p of h) { ctx.beginPath(); ctx.arc(A.X(p[0] + 1800), A.Y(p[1]), 2.5 * d, 0, 7); ctx.fill(); }
+  ctx.strokeStyle = css("--muted"); ctx.setLineDash([4 * d, 3 * d]); ctx.lineWidth = d;
+  const ym = A.Y(R.quiet.mean_uA); ctx.beginPath(); ctx.moveTo(A.padL, ym); ctx.lineTo(A.padL + A.pw, ym); ctx.stroke();
+  ctx.setLineDash([]);
+  geoH = { A, d };
+}
+boxH.addEventListener("pointermove", e => {
+  if (!geoH) return;
+  const r = boxH.getBoundingClientRect(), t = geoH.A.inv((e.clientX - r.left) * geoH.d);
+  const p = R.hourly.find(q => t >= q[0] && t < q[0] + 3600);
+  tip(boxH, p ? fmtT(p[0], "dayhm") + " Uhr · " + fmtA(p[1]) : null, e);
+});
+boxH.addEventListener("pointerleave", () => tip(boxH, null));
+
+// Ladung pro Wachphase (Punkte)
+const boxW = $("chW");
+let geoW = null;
+function drawW() {
+  const g = setupCanvas(boxW), P = R.params;
+  const hi = Math.max(P.redraw_uAh, ...R.wakes.map(w => w[2]));
+  const ax = niceLin(0, hi * 1.15);
+  const A = axes(g, { x0: R.start, x1: R.end, log: false, y0: 0, y1: ax.y1, step: ax.step, yfmt: v => fmtQ(v) });
+  const { ctx, d } = g;
+  ctx.strokeStyle = css("--muted"); ctx.setLineDash([4 * d, 3 * d]); ctx.lineWidth = d;
+  const yr = A.Y(P.redraw_uAh); ctx.beginPath(); ctx.moveTo(A.padL, yr); ctx.lineTo(A.padL + A.pw, yr); ctx.stroke();
+  ctx.setLineDash([]);
+  const pts = [];
+  for (const w of R.wakes) {
+    const x = A.X(w[0]), y = A.Y(w[2]), big = w[2] >= P.redraw_uAh;
+    ctx.fillStyle = css(big ? "--c1" : "--c2"); ctx.strokeStyle = css("--bg"); ctx.lineWidth = d;
+    ctx.beginPath();
+    if (big) ctx.arc(x, y, 4 * d, 0, 7);
+    else { ctx.moveTo(x, y - 5 * d); ctx.lineTo(x + 4.5 * d, y + 3.5 * d); ctx.lineTo(x - 4.5 * d, y + 3.5 * d); ctx.closePath(); }
+    ctx.fill(); ctx.stroke();
+    pts.push({ x, y, w });
+  }
+  geoW = { A, d, pts };
+}
+function nearestW(e) {
+  if (!geoW) return null;
+  const r = boxW.getBoundingClientRect(), px = (e.clientX - r.left) * geoW.d, py = (e.clientY - r.top) * geoW.d;
+  let best = null, bd = 12 * geoW.d;
+  for (const p of geoW.pts) { const dd = Math.hypot(p.x - px, p.y - py); if (dd < bd) { bd = dd; best = p.w; } }
+  return best;
+}
+const recFor = w => rec.find(r => Math.abs(r.t0 - w[0]) < 5 && r.status === "ok");
+boxW.addEventListener("pointermove", e => {
+  const w = nearestW(e);
+  boxW.style.cursor = w && recFor(w) ? "pointer" : "default";
+  tip(boxW, w ? fmtT(w[0], "dayhm") + ":" + p2(new Date(w[0] * 1000).getSeconds()) + " · " + fmtS(w[1]) + " · " + fmtQ(w[2]) +
+               (recFor(w) ? "" : " · keine Aufnahme") : null, e);
+});
+boxW.addEventListener("pointerleave", () => tip(boxW, null));
+boxW.addEventListener("click", e => { const w = nearestW(e); const r = w && recFor(w); if (r) openWake(r); });
+
+function tables() {
+  let h = "<table><tr><th>Tag</th><th>gemessen</th><th>Verbrauch</th><th>pro Tag</th><th>Wachphasen</th><th>davon Ladung</th><th>Ruhestrom</th></tr>";
+  for (const x of R.daily.slice().reverse())
+    h += `<tr><td>${x.day.slice(8, 10)}.${x.day.slice(5, 7)}.</td><td>${x.hours.toFixed(1)} h</td><td>${fmtQ(x.uAh)}</td>` +
+         `<td>${x.per_day_mAh !== null ? x.per_day_mAh.toFixed(2) + " mAh" : "–"}</td><td>${x.wakes}</td><td>${fmtQ(x.wake_uAh)}</td><td>${fmtA(x.quiet_uA)}</td></tr>`;
+  $("tDays").innerHTML = h + "</table>" + '<div class="hint">„pro Tag“ hochgerechnet aus den gemessenen Stunden des Tages.</div>';
+  if (rec.length) {
+    let t = "<table><tr><th>Zeit</th><th>aktiv</th><th>Ladung aktiv</th><th>Mittel</th><th>Spitze 1 ms</th><th>Spitze</th><th></th></tr>";
+    rec.slice().forEach((w, i) => {
+      const ok = w.status === "ok";
+      t += `<tr class="${ok ? "click" : ""}" data-i="${i}"><td>${fmtT(w.t0, "dayhm")}:${p2(new Date(w.t0 * 1000).getSeconds())}</td>` +
+           `<td>${fmtS(w.active_s)}</td><td>${fmtQ(w.active_uAh)}</td><td>${fmtA(w.mean_uA)}</td><td>${fmtA(w.peak_1ms_uA)}</td>` +
+           `<td>${fmtA(w.peak_uA)}</td><td>${ok ? "öffnen" : (w.status || "")}${w.truncated ? " abgeschnitten" : ""}</td></tr>`;
+    });
+    $("tWakes").innerHTML = t + "</table>";
+    $("tWakes").querySelectorAll("tr.click").forEach(tr => tr.onclick = () => openWake(rec[+tr.dataset.i]));
+  } else {
+    let t = '<div class="hint">Keine Aufnahmen im Zeitraum (WAKE_CAPTURE=0 oder gelöscht). Liste aus der CSV (1-s-Auflösung):</div>' +
+            "<table><tr><th>Zeit</th><th>Dauer</th><th>Ladung</th><th>Max (1 s)</th></tr>";
+    for (const w of R.wakes.slice().reverse())
+      t += `<tr><td>${fmtT(w[0], "dayhm")}</td><td>${fmtS(w[1])}</td><td>${fmtQ(w[2])}</td><td>${fmtA(w[3])}</td></tr>`;
+    $("tWakes").innerHTML = t + "</table>";
+  }
+}
+
+// ---------- Wachphase in voller Auflösung
+const boxD = $("chD");
+let geoD = null, dSel = null, dDrag = null;
+async function wakeReq(a, b, meta) {
+  const cols = Math.max(200, Math.floor(boxD.getBoundingClientRect().width * (window.devicePixelRatio || 1)));
+  const q = new URLSearchParams({ file: detail.w.file, n: String(cols) });
+  if (a !== undefined) { q.set("a", String(Math.max(0, Math.floor(a)))); q.set("b", String(Math.ceil(b))); }
+  if (meta) q.set("meta", "1");
+  const r = await fetch("api/wake?" + q); return r.json();
+}
+async function openWake(w) {
+  $("detail").style.display = "block";
+  detail = { w, view: null, data: null, meta: null };
+  dSel = null; $("dsel").style.display = "none";
+  $("dH").textContent = "Wachphase " + fmtT(w.t0, "dayhm") + ":" + p2(new Date(w.t0 * 1000).getSeconds()) + " (volle Auflösung)";
+  $("dInfo").textContent = "lädt …";
+  $("detail").scrollIntoView({ behavior: "smooth", block: "start" });
+  const j = await wakeReq(undefined, undefined, true);
+  if (j.error) { $("dInfo").textContent = j.error; return; }
+  detail.meta = j.meta; detail.total = j.total; detail.rate = j.rate;
+  const m = j.meta;
+  $("dStats").innerHTML = [
+    ["aktiv", fmtS(m.active_s)], ["Ladung aktiv", fmtQ(m.active_uAh)], ["Ladung gesamt", fmtQ(m.charge_uAh)],
+    ["Mittel", fmtA(m.mean_uA)], ["Spitze 1 ms", fmtA(m.peak_1ms_uA)], ["Spitze (10 µs)", fmtA(m.peak_uA)],
+  ].map(([k, v]) => `<div class="stat"><span>${k}</span><b>${v}</b></div>`).join("");
+  showD(0, j.total, j);
+}
+async function showD(a, b, pre) {
+  a = Math.max(0, Math.round(a)); b = Math.min(detail.total, Math.round(b));
+  if (b - a < 20) { const c = (a + b) / 2; a = Math.max(0, Math.round(c - 10)); b = Math.min(detail.total, a + 20); }
+  detail.view = [a, b];
+  const j = pre && pre.a === a && pre.b === b ? pre : await wakeReq(a, b);
+  if (j.error) { $("dInfo").textContent = j.error; return; }
+  detail.data = j; drawD();
+}
+function drawD() {
+  if (!detail || !detail.data) return;
+  const j = detail.data, r = detail.rate, m = detail.meta, g = setupCanvas(boxD);
+  const trig = m.pre_samples || 0;                   // x-Achse: Sekunden relativ zum Trigger
+  const x0 = (j.a - trig) / r, x1 = (j.b - trig) / r;
+  const log = $("dScale").value === "log";
+  let lo = Infinity, hi = -Infinity;
+  for (let i = 0; i < j.mean.length; i++) {
+    if (j.mean[i] > 0 && j.mean[i] < lo) lo = j.mean[i];
+    if (j.min[i] > 0 && j.min[i] < lo) lo = j.min[i];
+    if (j.max[i] > hi) hi = j.max[i];
+  }
+  let o;
+  if (log) { const ax = niceLog((isFinite(lo) ? lo : 1) * 0.5, hi); o = { log, y0: ax.y0, y1: ax.y1 }; }
+  else { const ax = niceLin(Math.min(0, ...j.min), hi * 1.02); o = { log, y0: ax.y0, y1: ax.y1, step: ax.step }; }
+  Object.assign(o, { x0, x1, rel: true, yfmt: fmtA });
+  const A = axes(g, o), { ctx, d } = g;
+  // Vorlauf und aktiver Teil
+  const xs = s => A.X((s - trig) / r);
+  const band = (sa, sb, c) => { const a = Math.max(A.padL, xs(sa)), b = Math.min(A.padL + A.pw, xs(sb)); if (b > a) { ctx.fillStyle = css(c); ctx.fillRect(a, A.padT, b - a, A.ph); } };
+  band(0, trig, "--pre");
+  if (m.active_samples) band(trig, trig + m.active_samples, "--act");
+  if (dSel) band(Math.min(...dSel), Math.max(...dSel), "--sel");
+  const n = j.mean.length, cw = A.pw / n;
+  if (j.per > 1) {
+    ctx.fillStyle = css("--c1env");
+    for (let i = 0; i < n; i++) { const ya = A.Y(j.max[i]), yb = A.Y(j.min[i]); ctx.fillRect(A.padL + i * cw, ya, Math.max(cw, 1), Math.max(d, yb - ya)); }
+  }
+  ctx.strokeStyle = css("--c1"); ctx.lineWidth = (j.per > 1 ? 1.5 : 1.2) * d; ctx.beginPath();
+  for (let i = 0; i < n; i++) {
+    const x = A.padL + (i + 0.5) * cw, y = A.Y(j.mean[i]);
+    if (j.per === 1 && i) { ctx.lineTo(x - cw / 2, A.Y(j.mean[i - 1])); ctx.lineTo(x - cw / 2, y); }
+    i ? ctx.lineTo(x, y) : ctx.moveTo(x, y);
+  }
+  ctx.stroke();
+  geoD = { A, d, trig, r };
+  $("dInfo").textContent = "Ausschnitt " + fmtS((j.b - j.a) / r) + ", " + (j.per > 1 ? "je Punkt " + fmtS(j.per / r) + " (Min/Mittel/Max)" : "Rohwerte (10 µs)") +
+    " · Ladung im Ausschnitt " + fmtQ(j.seg_uAh) + " · Mittel " + fmtA(j.seg_mean_uA) + " · Spitze " + fmtA(j.seg_max_uA) +
+    " · grau: Vorlauf, orange: aktiv";
+}
+const sampleAt = e => { const rr = boxD.getBoundingClientRect(); return geoD.A.inv((e.clientX - rr.left) * geoD.d) * geoD.r + geoD.trig; };
+boxD.addEventListener("pointerdown", e => { if (!geoD || e.button !== 0) return; boxD.setPointerCapture(e.pointerId); dDrag = sampleAt(e); });
+boxD.addEventListener("pointermove", e => {
+  if (!geoD) return;
+  const s = sampleAt(e);
+  if (dDrag !== null && Math.abs(s - dDrag) > (detail.view[1] - detail.view[0]) / 300) { dSel = [dDrag, s]; drawD(); }
+  const j = detail.data, i = Math.floor((s - j.a) / j.per);
+  if (i < 0 || i >= j.mean.length) return tip(boxD, null);
+  tip(boxD, (s - geoD.trig >= 0 ? "+" : "−") + fmtS(Math.abs((s - geoD.trig) / geoD.r)) + " · " +
+            (j.per > 1 ? "Mittel " + fmtA(j.mean[i]) + " · Min " + fmtA(j.min[i]) + " · Max " + fmtA(j.max[i]) : fmtA(j.mean[i])), e);
+});
+boxD.addEventListener("pointerup", async () => {
+  dDrag = null;
+  if (!dSel) return;
+  const a = Math.max(0, Math.round(Math.min(...dSel))), b = Math.min(detail.total, Math.round(Math.max(...dSel)));
+  const j = await wakeReq(a, b);                       // exakte Werte aus allen Samples
+  if (j.error) return;
+  $("dselT").innerHTML = `<b>${fmtS((b - a) / detail.rate)}</b> ab ${(a - geoD.trig >= 0 ? "+" : "−") + fmtS(Math.abs((a - geoD.trig) / detail.rate))}` +
+    ` · Mittel <b>${fmtA(j.seg_mean_uA)}</b> · Spitze <b>${fmtA(j.seg_max_uA)}</b> · Ladung <b>${fmtQ(j.seg_uAh)}</b>`;
+  $("dsel").style.display = "block";
+});
+boxD.addEventListener("pointerleave", () => tip(boxD, null));
+boxD.addEventListener("dblclick", () => { dSel = null; $("dsel").style.display = "none"; showD(0, detail.total); });
+boxD.addEventListener("wheel", e => {
+  if (!geoD) return; e.preventDefault();
+  const [a, b] = detail.view, span = b - a;
+  if (e.shiftKey || Math.abs(e.deltaX) > Math.abs(e.deltaY)) {
+    let sh = ((e.shiftKey ? e.deltaY : e.deltaX) / geoD.A.pw) * span * geoD.d;
+    sh = Math.max(-a, Math.min(detail.total - b, sh));
+    queueD(a + sh, b + sh);
+  } else {
+    const c = sampleAt(e), f = Math.pow(1.0015, e.deltaY), frac = (c - a) / span;
+    const ns = Math.min(detail.total, Math.max(20, span * f)), na = Math.max(0, Math.min(detail.total - ns, c - frac * ns));
+    queueD(na, na + ns);
+  }
+}, { passive: false });
+let dTimer = null;
+function queueD(a, b) { detail.view = [a, b]; clearTimeout(dTimer); dTimer = setTimeout(() => showD(a, b), 60); }
+$("dselZoom").onclick = () => { if (dSel) { const a = Math.min(...dSel), b = Math.max(...dSel), m = (b - a) * 0.05; showD(a - m, b + m); } };
+$("dAll").onclick = () => { dSel = null; $("dsel").style.display = "none"; showD(0, detail.total); };
+$("dScale").onchange = drawD;
+$("dClose").onclick = () => { $("detail").style.display = "none"; detail = null; };
+function download(name, blob) {
+  const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = name;
+  document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+}
+$("dCsv").onclick = () => {
+  if (!detail || !detail.data) return;
+  const j = detail.data, r = detail.rate, trig = detail.meta.pre_samples || 0;
+  const lines = ["t_rel_s,min_uA,mean_uA,max_uA"];
+  for (let i = 0; i < j.mean.length; i++)
+    lines.push(((j.a + i * j.per - trig) / r).toFixed(6) + "," + j.min[i] + "," + j.mean[i] + "," + j.max[i]);
+  download(detail.w.file.split("/").pop().replace(".npz", "") + "_" + j.a + "-" + j.b + ".csv", new Blob([lines.join("\n") + "\n"], { type: "text/csv" }));
+};
+$("dPng").onclick = () => {
+  if (!geoD) return;
+  const cv = boxD.querySelector("canvas"), d = geoD.d, head = 30 * d, out = document.createElement("canvas");
+  out.width = cv.width; out.height = cv.height + head;
+  const o = out.getContext("2d"); o.fillStyle = css("--bg"); o.fillRect(0, 0, out.width, out.height); o.drawImage(cv, 0, head);
+  o.fillStyle = css("--fg"); o.font = "600 " + (13 * d) + "px system-ui, sans-serif"; o.textBaseline = "top";
+  o.fillText($("dH").textContent + " · " + $("dInfo").textContent.split(" · grau")[0], 10 * d, 8 * d);
+  out.toBlob(b => download(detail.w.file.split("/").pop().replace(".npz", "") + ".png", b), "image/png");
+};
+
+window.addEventListener("resize", () => { if (R) { drawV(); drawH(); drawW(); } drawD(); });
+load();
+</script>
+</body>
+</html>
