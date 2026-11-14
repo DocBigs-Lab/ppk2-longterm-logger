@@ -1,0 +1,6 @@
+.env
+data/
+__pycache__/
+*.pyc
+# Lokale Arbeitsnotizen (enthalten Hostnamen der Einsatzumgebung)
+CLAUDE.md

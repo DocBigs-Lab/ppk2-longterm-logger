@@ -1,0 +1,7 @@
+.env
+data/
+.git/
+.github/
+__pycache__/
+*.md
+*.jpg
