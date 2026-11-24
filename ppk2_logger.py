@@ -14,6 +14,7 @@ import numpy as np
 from ppk2_api.ppk2_api import PPK2_API, PPK2_MP
 
 from ppk2_fast import FastDecoder
+from projects import FixedDir, ProjectStore
 
 PORT = os.getenv("PPK2_PORT", "")                 # leer = automatisch suchen
 MODE = os.getenv("PPK2_MODE", "source")           # source | ampere
@@ -48,6 +49,23 @@ WAKE_MIN_FREE_MB = float(os.getenv("WAKE_MIN_FREE_MB", "500"))
 # Live-Ansicht im Browser (live_view.py), leer oder 0 = aus
 LIVE_PORT = int(os.getenv("LIVE_PORT", "") or 0)
 LIVE_HISTORY_S = float(os.getenv("LIVE_HISTORY_S", "120"))
+LIVE_VERLAUF_H = float(os.getenv("LIVE_VERLAUF_H", "24"))
+# Schutz für Änderungen über die Weboberfläche (Projekte), leer = keiner
+ADMIN_TOKEN = os.getenv("ADMIN_TOKEN", "")
+
+
+def env_settings():
+    """Einstellungen aus .env: Vorbelegung neuer Projekte. Danach gelten die Werte im
+    Projekt (projekt.json, über die Weboberfläche änderbar)."""
+    return {"battery_mAh": BATTERY_MAH, "battery_usable": BATTERY_USABLE,
+            "quiet_max_uA": QUIET_MAX_UA, "redraw_uAh": 120.0,
+            "wake_capture": WAKE_CAPTURE, "wake_trigger_uA": WAKE_TRIGGER_UA,
+            "wake_trigger_ms": WAKE_TRIGGER_MS, "wake_pre_s": WAKE_PRE_S,
+            "wake_post_s": WAKE_POST_S, "wake_max_s": WAKE_MAX_S, "wake_max_mb": WAKE_MAX_MB}
+
+
+WAKE_KEYS = ("wake_capture", "wake_trigger_uA", "wake_trigger_ms", "wake_pre_s",
+             "wake_post_s", "wake_max_s", "wake_max_mb")
 
 running = True
 
@@ -73,7 +91,9 @@ def find_port():
     return devs[0]
 
 
-def ha_sensors():
+def ha_sensors(wake=None):
+    if wake is None:
+        wake = WAKE_CAPTURE
     sensors = [
         ("mean_uA", "Strom Mittel", "µA", "measurement"),
         ("quiet_avg_uA", f"Ruhestrom ({ROLL_WINDOW_S / 60:g} min)", "µA", "measurement"),
@@ -85,47 +105,55 @@ def ha_sensors():
         ("runtime_h", "Laufzeit", "h", "measurement"),
         ("est_days", "Geschätzte Akkulaufzeit", "d", "measurement"),
     ]
-    if WAKE_CAPTURE:
-        sensors += [
-            ("wake_last_uAh", "Letzte Wachphase Ladung", "µAh", "measurement"),
-            ("wake_last_s", "Letzte Wachphase Dauer", "s", "measurement"),
-            ("wake_count", "Wachphasen seit Start", None, "measurement"),
-        ]
+    if wake:
+        sensors += WAKE_SENSORS
+    sensors.append(("projekt", "Projekt", None, None))
     return sensors
 
 
-def make_recorder():
+WAKE_SENSORS = [
+    ("wake_last_uAh", "Letzte Wachphase Ladung", "µAh", "measurement"),
+    ("wake_last_s", "Letzte Wachphase Dauer", "s", "measurement"),
+    ("wake_count", "Wachphasen seit Start", None, "measurement"),
+]
+
+
+def make_recorder(out_dir=None, s=None):
     """WakeRecorder anlegen, falls eingeschaltet. Fehler hier dürfen die Messung nicht stoppen."""
-    if not WAKE_CAPTURE:
+    s = s or env_settings()
+    if not s["wake_capture"]:
         return None
     try:
         from wake_capture import WakeRecorder
-        rec = WakeRecorder(OUT_DIR, trigger_ua=WAKE_TRIGGER_UA, trigger_ms=WAKE_TRIGGER_MS,
-                           pre_s=WAKE_PRE_S, post_s=WAKE_POST_S, max_s=WAKE_MAX_S,
-                           max_mb=WAKE_MAX_MB, min_free_mb=WAKE_MIN_FREE_MB,
+        rec = WakeRecorder(out_dir or OUT_DIR, trigger_ua=s["wake_trigger_uA"],
+                           trigger_ms=s["wake_trigger_ms"],
+                           pre_s=s["wake_pre_s"], post_s=s["wake_post_s"],
+                           max_s=s["wake_max_s"], max_mb=s["wake_max_mb"],
+                           min_free_mb=WAKE_MIN_FREE_MB,
                            rate=int(round(1 / SAMPLE_DT)),
                            meta={"mode": MODE, "voltage_mV": VOLTAGE_MV})
-        print(f"Wachphasen-Aufnahme an (Schwelle {WAKE_TRIGGER_UA:g} µA über "
-              f"{WAKE_TRIGGER_MS:g} ms, "
-              f"Vorlauf {WAKE_PRE_S:g} s, Nachlauf {WAKE_POST_S:g} s, max. {WAKE_MAX_S:g} s, "
-              f"Grenze {WAKE_MAX_MB:g} MB)", flush=True)
+        print(f"Wachphasen-Aufnahme an (Schwelle {s['wake_trigger_uA']:g} µA über "
+              f"{s['wake_trigger_ms']:g} ms, Vorlauf {s['wake_pre_s']:g} s, "
+              f"Nachlauf {s['wake_post_s']:g} s, max. {s['wake_max_s']:g} s, "
+              f"Grenze {s['wake_max_mb']:g} MB)", flush=True)
         return rec
     except Exception as e:
         print(f"Wachphasen-Aufnahme nicht verfügbar: {e!r}", file=sys.stderr, flush=True)
         return None
 
 
-def make_live():
+def make_live(projects=None):
     """LiveFeed und Webserver starten, falls eingeschaltet. Fehler stoppen die Messung nicht."""
     if not LIVE_PORT:
         return None, None
     try:
         from live_view import LiveFeed, LiveServer
-        feed = LiveFeed(history_s=LIVE_HISTORY_S, rate=int(round(1 / SAMPLE_DT)))
+        feed = LiveFeed(history_s=LIVE_HISTORY_S, rate=int(round(1 / SAMPLE_DT)),
+                        long_s=LIVE_VERLAUF_H * 3600)
         server = LiveServer(feed, LIVE_PORT, info={"mode": MODE, "voltage_mV": VOLTAGE_MV},
-                            data_dir=OUT_DIR)
+                            data_dir=OUT_DIR, projects=projects, token=ADMIN_TOKEN)
         print(f"Live-Ansicht an: http://<Host>:{server.port}/ "
-              f"({LIVE_HISTORY_S:g} s Verlauf)", flush=True)
+              f"({LIVE_HISTORY_S:g} s fein, {LIVE_VERLAUF_H:g} h grob)", flush=True)
         return feed, server
     except Exception as e:
         print(f"Live-Ansicht nicht verfügbar: {e!r}", file=sys.stderr, flush=True)
@@ -144,21 +172,7 @@ def make_mqtt():
         c.username_pw_set(MQTT_USER, MQTT_PASS)
 
     def on_connect(client, *args):
-        # Home-Assistant-Discovery: Sensoren erscheinen automatisch
-        for key, name, unit, sclass in ha_sensors():
-            cfg = {
-                "name": name,
-                "unique_id": f"ppk2_{key}",
-                "state_topic": MQTT_TOPIC,
-                "value_template": f"{{{{ value_json.{key} }}}}",
-                "state_class": sclass,
-                "device": {"identifiers": ["ppk2_logger"], "name": "PPK2 Logger",
-                           "manufacturer": "Nordic Semiconductor", "model": "PPK2"},
-            }
-            if unit:
-                cfg["unit_of_measurement"] = unit
-            client.publish(f"homeassistant/sensor/ppk2_{key}/config",
-                           json.dumps(cfg), retain=True)
+        publish_discovery(client)
 
     c.on_connect = on_connect
     c.connect_async(MQTT_HOST, MQTT_PORT)
@@ -166,12 +180,42 @@ def make_mqtt():
     return c
 
 
+_discovery_wake = None   # Stand der Wachphasen-Sensoren (aktives Projekt), None = .env
+
+
+def publish_discovery(client, wake=None):
+    """Home-Assistant-Discovery: Sensoren erscheinen automatisch. Ist die
+    Wachphasen-Aufnahme im aktiven Projekt aus, werden deren Sensoren entfernt."""
+    global _discovery_wake
+    if wake is not None:
+        _discovery_wake = wake
+    wake = WAKE_CAPTURE if _discovery_wake is None else _discovery_wake
+    for key, name, unit, sclass in ha_sensors(wake):
+        cfg = {
+            "name": name,
+            "unique_id": f"ppk2_{key}",
+            "state_topic": MQTT_TOPIC,
+            "value_template": f"{{{{ value_json.{key} }}}}",
+            "device": {"identifiers": ["ppk2_logger"], "name": "PPK2 Logger",
+                       "manufacturer": "Nordic Semiconductor", "model": "PPK2"},
+        }
+        if sclass:
+            cfg["state_class"] = sclass
+        if unit:
+            cfg["unit_of_measurement"] = unit
+        client.publish(f"homeassistant/sensor/ppk2_{key}/config",
+                       json.dumps(cfg), retain=True)
+    if not wake:
+        for key, *_ in WAKE_SENSORS:
+            client.publish(f"homeassistant/sensor/ppk2_{key}/config", "", retain=True)
+
+
 CSV_HEADER = ["timestamp_utc", "mean_uA", "min_uA", "max_uA", "samples",
               "charge_uAh_total", "median_uA"]
 
 
-def open_csv():
-    path = os.path.join(OUT_DIR, f"ppk2_{datetime.now():%Y-%m-%d}.csv")
+def open_csv(out_dir=None):
+    path = os.path.join(out_dir or OUT_DIR, f"ppk2_{datetime.now():%Y-%m-%d}.csv")
     if os.path.exists(path):
         # Datei mit altem Spaltenlayout beiseite legen, damit die Spalten nicht gemischt werden
         with open(path, newline="") as old:
@@ -205,7 +249,20 @@ def quiesce(ppk2):
     return False
 
 
-def measure(mq, live=None):
+def close_recorder(recorder):
+    if recorder:
+        try:
+            recorder.close(timeout=8)   # Docker wartet beim Stoppen 10 s
+        except Exception:
+            pass
+
+
+def measure(mq, live=None, projects=None):
+    """Messschleife. projects: ProjectStore (Ordner und Einstellungen des aktiven Projekts,
+    Wechsel ohne Neustart). Ohne: OUT_DIR und Einstellungen aus .env."""
+    projects = projects or FixedDir(OUT_DIR, env_settings())
+    gen, cur = projects.snapshot()
+    s = cur["settings"]
     port = find_port()
     print(f"Verwende Port {port}", flush=True)
     # PPK2_MP liest die Rohdaten in einem eigenen Thread, damit der Empfangspuffer beim
@@ -241,11 +298,41 @@ def measure(mq, live=None):
     buf, n, t0, charge = [], 0, time.time(), 0.0
     t_start = t0
     day = datetime.now().date()
-    path, f, w = open_csv()
+    path, f, w = open_csv(cur["dir"])
     quiet_hist = deque()   # (Zeit, Mittelwert, Dauer) ruhiger Intervalle
-    recorder = make_recorder()
+    recorder = make_recorder(cur["dir"], s)
+    if cur["name"]:
+        print(f"Projekt: {cur['name']} ({cur['slug']})", flush=True)
     try:
         while running:
+            if projects.gen != gen:
+                # Projekt gewechselt oder Einstellungen geändert: umstellen, ohne die
+                # serielle Verbindung anzufassen (der Prüfling bleibt versorgt)
+                gen, new = projects.snapshot()
+                if new["slug"] != cur["slug"]:
+                    close_recorder(recorder)
+                    f.close()
+                    cur, s = new, new["settings"]
+                    path, f, w = open_csv(cur["dir"])
+                    day = datetime.now().date()
+                    recorder = make_recorder(cur["dir"], s)
+                    now = time.time()
+                    buf, n, t0, t_start, charge = [], 0, now, now, 0.0
+                    quiet_hist.clear()
+                    print(f"Projekt gewechselt: {cur['name']} ({cur['slug']}), "
+                          f"Zähler auf 0", flush=True)
+                else:
+                    old, cur, s = s, new, new["settings"]
+                    if any(old[k] != s[k] for k in WAKE_KEYS):
+                        close_recorder(recorder)
+                        recorder = make_recorder(cur["dir"], s)
+                    print(f"Einstellungen von {cur['name']} übernommen", flush=True)
+                if mq:
+                    try:
+                        publish_discovery(mq, s["wake_capture"])
+                    except Exception as e:
+                        print(f"MQTT-Discovery fehlgeschlagen: {e!r}", file=sys.stderr,
+                              flush=True)
             raw = ppk2.get_data()
             if raw:
                 samples = decoder.decode(raw)
@@ -273,7 +360,7 @@ def measure(mq, live=None):
                 # Ladung aus Mittelwert x echter Intervalldauer: unabhängig von verlorenen Samples
                 mean_now = float(a.mean())
                 charge += mean_now * (now - t0) / 3600.0
-                if mean_now < QUIET_MAX_UA:
+                if mean_now < s["quiet_max_uA"]:
                     quiet_hist.append((now, mean_now, now - t0))
                 while quiet_hist and now - quiet_hist[0][0] > ROLL_WINDOW_S:
                     quiet_hist.popleft()
@@ -287,7 +374,7 @@ def measure(mq, live=None):
                 if datetime.now().date() != day:
                     f.close()
                     day = datetime.now().date()
-                    path, f, w = open_csv()
+                    path, f, w = open_csv(cur["dir"])
                 w.writerow(row)
                 f.flush()
                 if mq or live:
@@ -296,13 +383,16 @@ def measure(mq, live=None):
                         ["ts", "mean_uA", "min_uA", "max_uA", "samples", "charge_uAh",
                          "median_uA"], row))
                     payload["runtime_h"] = round(runtime_s / 3600.0, 3)
+                    if cur["name"]:
+                        payload["projekt"] = cur["name"]
                     avg_total = charge * 3600.0 / runtime_s
                     payload["avg_total_uA"] = round(avg_total, 3)
                     if quiet_avg is not None:
                         payload["quiet_avg_uA"] = round(quiet_avg, 1)
                     if avg_total > 0:
                         payload["est_days"] = round(
-                            BATTERY_MAH * 1000.0 * BATTERY_USABLE / avg_total / 24.0, 1)
+                            s["battery_mAh"] * 1000.0 * s["battery_usable"]
+                            / avg_total / 24.0, 1)
                     if recorder:
                         payload["wake_count"] = recorder.count
                         if recorder.last:
@@ -314,10 +404,13 @@ def measure(mq, live=None):
                         try:
                             st = dict(payload, interval_s=round(now - t0, 3),
                                       quiet_window_s=ROLL_WINDOW_S,
-                                      battery_mAh=BATTERY_MAH, battery_usable=BATTERY_USABLE,
+                                      battery_mAh=s["battery_mAh"],
+                                      battery_usable=s["battery_usable"],
+                                      quiet_max_uA=s["quiet_max_uA"],
                                       wake_capture=bool(recorder),
-                                      wake_trigger_uA=WAKE_TRIGGER_UA,
-                                      wake_trigger_ms=WAKE_TRIGGER_MS)
+                                      wake_trigger_uA=s["wake_trigger_uA"],
+                                      wake_trigger_ms=s["wake_trigger_ms"],
+                                      projekt_slug=cur["slug"])
                             if recorder:
                                 st["wake_rec"] = recorder._state == "rec"
                                 if st["wake_rec"]:
@@ -337,20 +430,20 @@ def measure(mq, live=None):
         except Exception:
             pass
         f.close()
-        if recorder:
-            try:
-                recorder.close(timeout=8)   # Docker wartet beim Stoppen 10 s
-            except Exception:
-                pass
+        close_recorder(recorder)
 
 
 def main():
     os.makedirs(OUT_DIR, exist_ok=True)
+    projects = ProjectStore(OUT_DIR, env_settings(),
+                            fixed={"mode": MODE, "voltage_mV": VOLTAGE_MV})
+    global _discovery_wake
+    _discovery_wake = projects.snapshot()[1]["settings"]["wake_capture"]
     mq = make_mqtt()
-    live, _server = make_live()   # Server läuft über Neustarts der Messung hinweg
+    live, _server = make_live(projects)   # Server läuft über Neustarts der Messung hinweg
     while running:
         try:
-            measure(mq, live)
+            measure(mq, live, projects)
         except Exception as e:  # Gerät weg, USB-Hänger usw. -> neu versuchen
             print(f"Fehler: {e!r} - neuer Versuch in 5 s", file=sys.stderr, flush=True)
             time.sleep(5)

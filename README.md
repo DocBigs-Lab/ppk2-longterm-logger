@@ -22,12 +22,13 @@ Entstanden beim Messen eines ESP32-C6-E-Paper-Displays im Deep Sleep, aber nicht
 - **Stream-Wiederherstellung**: Läuft das PPK2 nach einem Absturz oder Neustart noch im Messmodus, wird der alte Datenstrom gestoppt und die Kalibrierung sauber geladen.
 - **Ampere- und Source-Modus**: externe Versorgung durchmessen oder das Testobjekt direkt vom PPK2 versorgen.
 - **Home Assistant per MQTT-Discovery**: die Sensoren legen sich selbst an, ohne YAML.
-- **Akkulaufzeit-Schätzung** aus dem Durchschnitt seit Start.
+- **Akkulaufzeit-Schätzung** aus dem Durchschnitt seit Projektstart, in der Live-Ansicht auch für einen frei gewählten Bereich.
 - **Ruhestrom-Sensor**: gleitender Mittelwert nur über „ruhige“ Intervalle, damit Wachphasen den Wert nicht verfälschen. Ideal, um Hardware-Umbauten live vorher/nachher zu vergleichen.
 - **`analyse.py`**: wertet die CSVs aus (Ruhestrom pro Stunde, Wachphasen, Tagesbilanz, Laufzeit), auf Wunsch als Diagramm.
 - **Wachphasen in voller Auflösung** (optional): Jede Wachphase wird mit 100 kSps samt Vorlauf gespeichert, `wake_view.py` zeigt Verlauf, Spitzen und Ladung (siehe [unten](#wachphasen-in-voller-auflösung)).
-- **Live-Ansicht im Browser** (optional): Hüllkurve mit 1 ms Auflösung, Bereiche ausmessen, Trigger wie am Oszilloskop, Export als CSV und PNG, während der Logger weiter misst (siehe [unten](#live-ansicht-im-browser)).
+- **Live-Ansicht im Browser** (optional): Hüllkurve mit 1 ms Auflösung, Fenster bis 24 h, Marker, Bereiche ausmessen, Trigger wie am Oszilloskop, Export als CSV und PNG, während der Logger weiter misst (siehe [unten](#live-ansicht-im-browser)).
 - **Auswertung im Browser** (mit der Live-Ansicht): Zeitraum wählen, Ruhestrom, Wachphasen, Tagesbilanz und Laufzeit als Diagramme, jede Wachphase bis auf einzelne Samples zoomen (siehe [unten](#auswertung-im-browser)).
+- **Projekte** (mit der Live-Ansicht): jedes Board bekommt einen eigenen Datenordner. Ein Assistent im Browser legt ein neues Projekt an und archiviert das alte, ohne die Messung zu unterbrechen. Archivierte Projekte lassen sich auswerten oder fortsetzen (siehe [unten](#projekte)).
 - **`diag.py`**: prüft, ob alle Samples ankommen, und schneidet Rohdaten mit (siehe [Diagnose](#diagnose)).
 
 ## Aufbau
@@ -67,7 +68,7 @@ Statt des fertigen Images kannst du auch selbst bauen: in `docker-compose.yml` d
 | `PPK2_VOLTAGE_MV` | `3300` | Spannung in mV, im Ampere-Modus der Wert für die Berechnung |
 | `PPK2_PORT` | leer | leer = automatisch suchen, sonst z. B. `/dev/ttyACM0` |
 | `LOG_INTERVAL_S` | `1` | Intervall der Statistik in Sekunden |
-| `OUT_DIR` | `/data` | Ordner der CSV-Dateien im Container |
+| `OUT_DIR` | `/data` | Datenordner im Container, darin `projekte/<name>/` |
 | `BATTERY_MAH` | `3000` | Akkukapazität für die Laufzeitschätzung |
 | `BATTERY_USABLE` | `0.8` | nutzbarer Anteil der Kapazität |
 | `MQTT_HOST` | leer | leer = MQTT aus |
@@ -83,7 +84,11 @@ Statt des fertigen Images kannst du auch selbst bauen: in `docker-compose.yml` d
 | `WAKE_MAX_MB` | `2000` | Obergrenze für `data/wake`, älteste Dateien werden gelöscht |
 | `WAKE_MIN_FREE_MB` | `500` | darunter wird nicht mehr gespeichert |
 | `LIVE_PORT` | leer | Port der Live-Ansicht und Auswertung im Container, leer = aus |
-| `LIVE_HISTORY_S` | `120` | so viele Sekunden hält der Logger für die Live-Ansicht vor (ca. 1,4 MB bei 120 s) |
+| `LIVE_HISTORY_S` | `120` | so viele Sekunden hält der Logger für die Live-Ansicht in 1 ms Auflösung vor (ca. 1,4 MB bei 120 s) |
+| `LIVE_VERLAUF_H` | `24` | so viele Stunden hält er zusätzlich in 100 ms Auflösung vor (ca. 17 MB bei 24 h), für lange Fenster |
+| `ADMIN_TOKEN` | leer | Passwort für Änderungen auf der Seite „Projekte“, leer = jeder im Heimnetz darf |
+
+Akku (`BATTERY_*`), `QUIET_MAX_UA` und alle `WAKE_*`-Werte außer `WAKE_MIN_FREE_MB` sind nur die **Vorbelegung** für neue Projekte. Danach gelten die Werte im Projekt, änderbar auf der Seite „Projekte“ ohne Neustart (siehe [Projekte](#projekte)). Modus und Spannung bleiben bewusst in `.env`.
 
 Kommentare in der `.env` gehören in eigene Zeilen. Docker liest sie sonst als Teil des Werts, aus `MQTT_TOPIC=ppk2/stats # Topic` wird ein ungültiges Topic.
 
@@ -97,7 +102,10 @@ Mit gesetztem `MQTT_HOST` meldet sich der Logger per Discovery als Gerät „PPK
 - Strom Durchschnitt seit Start (µA)
 - Laufzeit (h)
 - Geschätzte Akkulaufzeit (Tage)
-- mit `WAKE_CAPTURE=1` zusätzlich: Letzte Wachphase Ladung (µAh) und Dauer (s), Wachphasen seit Start
+- mit Wachphasen-Aufnahme zusätzlich: Letzte Wachphase Ladung (µAh) und Dauer (s), Wachphasen seit Start
+- Projekt (Name des aktiven Projekts)
+
+Nach einem Projektwechsel beginnen Ladung, Durchschnitt und Laufzeit wieder bei 0. Die Sensoren bleiben dieselben, im Verlauf von Home Assistant liegen beide Projekte hintereinander.
 
 ![Anzeige in Home Assistant](ppk2-ha.jpg)
 
@@ -146,23 +154,24 @@ Grenzen: Die Zeitstempel sind auf etwa 0,1 s genau (Blockgröße der Bibliothek)
 
 ## Live-Ansicht im Browser
 
-Der Logger kann den Strom live im Browser zeigen, während er weiter misst und aufzeichnet. Er bleibt dabei einziger Besitzer des PPK2. Zu sehen ist je Millisekunde Min, Max und Mittel (Hüllkurve) der letzten 2 Minuten, linear oder logarithmisch, mit Uhrzeit-Achse.
+Der Logger kann den Strom live im Browser zeigen, während er weiter misst und aufzeichnet. Er bleibt dabei einziger Besitzer des PPK2. Zu sehen ist je Millisekunde Min, Max und Mittel (Hüllkurve), linear oder logarithmisch, mit Uhrzeit-Achse. Das Fenster wählt man aus festen Werten (0,1 s bis 24 h) oder gibt es frei ein (z. B. „90 s“, „7 min“, „6 h“, auch als Adresse `/?fenster=15min`). Bis 2 Minuten zeigt die Seite 1-ms-Werte, darüber 100-ms-Werte aus dem Verlauf des Loggers (`LIVE_VERLAUF_H`, Standard 24 h). Die Seite lädt nur den Teil, der gerade gebraucht wird. War die Verbindung unterbrochen (z. B. Rechner im Ruhezustand), holt sie die fehlende Zeit danach beim Logger nach. Der Verlauf liegt nur im Speicher: Nach einem Neustart des Containers beginnt er leer, ältere Daten stehen in der [Auswertung](#auswertung-im-browser).
 
-- **Ausmessen und Zoom**: Bereich mit der Maus ziehen zeigt Dauer, Mittel, Min, Spitze (1 ms) und Ladung. Mausrad zoomt, Shift+Mausrad verschiebt, Doppelklick führt zurück zu live, „Zoom auf Auswahl“ vergrößert den markierten Bereich.
+- **Ausmessen und Zoom**: Bereich mit der Maus ziehen zeigt Dauer, Mittel, Min, Spitze (1 ms), Ladung und „Akku ≙ N Tage“: so lange hielte der Akku des Projekts, wenn der Strom dauerhaft so wäre wie im Bereich. Aussagekräftig nur für Bereiche über ganze Zyklen (Schlaf plus Wachphasen), ohne Anlaufphase. Mausrad zoomt, Shift+Mausrad verschiebt, Doppelklick führt zurück zu live, „Zoom auf Auswahl“ vergrößert den markierten Bereich.
+- **Marker**: Knopf „Marker“ setzt einen bei jetzt, Rechtsklick ins Diagramm an dieser Stelle. „→ jetzt“ zeigt live alles ab dem Marker (Fenster wächst mit, Mittel, Ladung und Akkulaufzeit seit dem Marker), „von/bis“ den Bereich zwischen zwei Markern. Name ändern per Klick auf den Namen. Marker sind nach Uhrzeit im Browser gespeichert (`localStorage`): Sie überstehen Neuladen und Neustarts, gelten aber nur in diesem Browser und unter derselben Adresse (Hostname und IP zählen getrennt). Anzeigen lassen sie sich, solange der Bereich im Verlauf liegt, sonst erscheinen sie blass.
 - **Trigger wie am Oszilloskop**: hält an, sobald der Strom über eine Schwelle steigt (100-ms-Mittel oder 1-ms-Spitze, Flanke), mit wählbarem Vorlauf (10/25/50 % des Fensters). So lässt sich die nächste Wachphase abfangen, ohne davorzusitzen.
-- **Wachphasen**: erfasste Wachphasen (`WAKE_CAPTURE=1`) erscheinen als Band im Verlauf und als Tabelle (Zeit, aktive Dauer, Ladung, Mittel, Spitze). Ein Klick auf eine Zeile springt zur Wachphase, solange sie in den letzten 2 Minuten liegt. Eine laufende Wachphase ist markiert.
+- **Wachphasen**: erfasste Wachphasen (`WAKE_CAPTURE=1`) erscheinen als Band im Verlauf und als Tabelle (Zeit, aktive Dauer, Ladung, Mittel, Spitze). Ein Klick auf eine Zeile springt zur Wachphase, solange sie im Verlauf liegt (älter als 2 Minuten in 100-ms-Werten). Eine laufende Wachphase ist markiert.
 - **Kennzahlen des Loggers** wie in Home Assistant: Ruhestrom, geschätzte Laufzeit, Ladung seit Start, Wachphasen, Samplerate.
-- **Export**: angezeigter Ausschnitt oder Auswahl als CSV (1-ms-Werte) oder PNG.
+- **Export**: angezeigter Ausschnitt oder Auswahl als CSV (1-ms-Werte, bei langen Fenstern 100-ms-Werte) oder PNG.
 
 Die y-Achse passt sich ruhig an (sofort größer, erst nach 3 s Ruhe wieder kleiner) und lässt sich mit „Achse halten“ festsetzen. Die Auflösung ist 1 ms. Einzelne Pulse in voller Auflösung (10 µs) stehen in den Wachphasen-Dateien.
 
-![Live-Ansicht mit ausgelöstem Trigger (simulierte Daten aus dem Demo-Modus)](docs/live-ansicht.png)
+![Live-Ansicht, Fenster 5 min, Bereich zwischen zwei Markern ausgemessen, Wachphasen als Bänder (simulierte Daten aus dem Demo-Modus)](docs/live-ansicht.png)
 
 Einschalten: in `.env` `LIVE_PORT=8080` setzen, in `docker-compose.yml` den Abschnitt `ports` einkommentieren und den Container neu starten (der Prüfling verliert dabei kurz die Versorgung). Danach `http://<Pi>:8080/` öffnen.
 
-Der Webserver nutzt nur die Python-Standardbibliothek (Server-Sent Events), bis zu 4 Browser gleichzeitig, ca. 25 kB/s je Browser. Am Raspberry Pi 4 kostet die Live-Ansicht etwa 2 % eines Kerns, die Samplerate bleibt bei 100 kSps. Fällt sie aus, läuft die Messung weiter. Es gibt keine Anmeldung, die Seite gehört nur ins Heimnetz.
+Der Webserver nutzt nur die Python-Standardbibliothek (Server-Sent Events), bis zu 4 Browser gleichzeitig, ca. 25 kB/s je Browser, dazu beim Aufziehen langer Fenster einmalig ca. 0,7 MB je Stunde Verlauf. Am Raspberry Pi 4 kostet die Live-Ansicht etwa 2 % eines Kerns, die Samplerate bleibt bei 100 kSps. Fällt sie aus, läuft die Messung weiter. Es gibt keine Anmeldung, die Seite gehört nur ins Heimnetz.
 
-Ohne PPK2 zeigt `python3 live_view.py --demo` die Seite mit simulierten Daten unter `http://127.0.0.1:8080/` (braucht numpy). Die Demo erzeugt vorab 48 h Verlauf mit Wachphasen, die Auswertung unter `/auswertung` ist nach ca. 50 s vollständig. Wer nur die Seiten `live_view.html` oder `auswertung.html` ändert, kann sie einzeln mit `docker cp live_view.html ppk2-logger:/app/` bzw. `docker cp auswertung.html ppk2-logger:/app/` in den laufenden Container kopieren, sie werden bei jedem Aufruf neu gelesen. Ein Neustart und damit ein Stromausfall am Prüfling ist dafür nicht nötig.
+Ohne PPK2 zeigt `python3 live_view.py --demo` die Seite mit simulierten Daten unter `http://127.0.0.1:8080/` (braucht numpy). Die Demo erzeugt vorab 48 h Verlauf mit Wachphasen, übernimmt ihn wie beim ersten Start in ein Projekt, und die Auswertung unter `/auswertung` ist nach ca. 50 s vollständig. Projekte lassen sich in der Demo anlegen und wechseln. Wer nur die Seiten `live_view.html`, `auswertung.html` oder `projekte.html` ändert, kann sie einzeln mit z. B. `docker cp auswertung.html ppk2-logger:/app/` in den laufenden Container kopieren, sie werden bei jedem Aufruf neu gelesen. Ein Neustart und damit ein Stromausfall am Prüfling ist dafür nicht nötig.
 
 ### Auswertung im Browser
 
@@ -178,9 +187,34 @@ Unter `http://<Pi>:8080/auswertung` (Reiter „Auswertung“ oben auf der Live-S
 
 Gerechnet wird in eigenen Prozessen mit niedriger Priorität (`nice 10`): `analyse.py --json` pro Abruf (Ergebnis 60 s zwischengespeichert), `wake_view.py --serve` dauerhaft für die Wachphasen (hält die letzten 3 Aufnahmen im Speicher). So rechnen sie nicht im Logger-Prozess und bremsen den Lese-Thread nicht aus. Gelesen werden nur Dateien unter `data/`.
 
+## Projekte
+
+Jede Messung (Board, Prüfling, Aufbau) ist ein Projekt mit eigenem Ordner:
+
+```
+data/
+  projekte.json               welches Projekt aktiv ist
+  projekte/
+    bisherige-messung/        projekt.json, ppk2_*.csv, wake/
+    sensorknoten-nrf52/
+```
+
+Unter `http://<Pi>:8080/projekte` (Reiter „Projekte“) stehen das aktive Projekt mit den Live-Kennzahlen und eine Liste aller Projekte mit Zeitraum, Ruhestrom, Tagesverbrauch, Laufzeit und Speicher. Die Kennzahlen archivierter Projekte gelten für die ganze Messdauer. Sie werden einmal im Hintergrund berechnet und als `zusammenfassung.json` im Projekt abgelegt.
+
+- **Neues Projekt**: Der Assistent fragt in vier Schritten Name und Board, Akku, Schwellen (Ruhestrom, Wachphasen-Aufnahme) ab und zeigt am Ende Modus und Spannung aus `.env` zur Kontrolle. Mit „Anlegen und starten“ wird das bisherige Projekt archiviert. Der Logger schreibt sofort in den neuen Ordner, ohne die Verbindung zum PPK2 zu schließen. Der Prüfling bleibt also versorgt, der Wechsel kostet keinen Stromschnitt. Ladungszähler und Laufzeitschätzung beginnen bei 0.
+- **Fortsetzen**: Ein archiviertes Projekt wird wieder aktiv, neue Daten werden dort angehängt.
+- **Bearbeiten**: Name, Board, Notiz und Einstellungen. Beim aktiven Projekt gelten sie sofort, die Zähler laufen weiter.
+- **Auswerten**: öffnet `/auswertung` für das Projekt. Dort lässt sich das Projekt auch oben wählen, die Schwellen und der Akku kommen aus dem Projekt, für archivierte Projekte ist „ganze Messung“ voreingestellt.
+
+Löschen geht nur von Hand: Ordner unter `data/projekte/` entfernen (nicht den des aktiven Projekts). Die Speichergrenze für Wachphasen gilt pro Projekt.
+
+Beim ersten Start dieser Version verschiebt der Logger vorhandene `ppk2_*.csv` und `wake/` aus `data/` in das Projekt „Bisherige Messung“. Andere Dateien (z. B. Mitschnitte von `diag.py`) bleiben liegen. `analyse.py` und `wake_view.py` nehmen ohne `--dir` das aktive Projekt, für ein anderes `--dir data/projekte/<name>`.
+
+Änderungen über die Seite lassen sich mit `ADMIN_TOKEN` in `.env` schützen. Der Browser fragt dann einmal nach dem Passwort und merkt es sich. Ohne Token darf jeder im Heimnetz Projekte anlegen und wechseln (gelesen werden kann ohnehin alles).
+
 ## Tests ohne Hardware
 
-`tests/` enthält eine Simulation (synthetische Wachphasen, Fake-PPK2) für Recorder, Logger-Schleife, Live-Ansicht, Auswertung im Browser und `wake_view.py`:
+`tests/` enthält eine Simulation (synthetische Wachphasen, Fake-PPK2) für Recorder, Logger-Schleife, Live-Ansicht, Auswertung im Browser, Projekte (inkl. Wechsel während der Messung) und `wake_view.py`:
 
 ```bash
 pip install numpy ppk2-api==0.9.2
@@ -249,7 +283,7 @@ Die Kacheln mischen hier beide Zustände, und die vier Stunden enthalten den Kal
 - Die Statistik pro Intervall zeigt keine einzelnen Stromspitzen. Dafür gibt es die Live-Ansicht (1 ms), die Wachphasen-Aufnahme (`WAKE_CAPTURE`, 10 µs) oder die Nordic-App.
 - Bis Version 11/2026 kamen am Raspberry Pi 4 nur ca. 88.000 statt 100.000 Samples pro Sekunde an. Ursache (geklärt mit `diag.py`): Bei gepulstem Strom wechselt das PPK2 ca. 11 000-mal pro Sekunde den Messbereich, fast jeder Block lief durch die langsame Python-Schleife der Bibliothek, der Lese-Thread kam zu selten dran und das PPK2 sendete weniger. Seit der Spike-Filter im Dekoder vektorisiert ist, entfällt diese Last: am selben Pi kommen jetzt im Mittel 100 333 Samples pro 1-s-Zeile an. Mittelwert und Ladung waren auch vorher richtig (Mittel × Zeit).
 - Der Container belegt am Pi 4 etwa einen Kern, auch ohne Browser. Das kommt vom Lese-Thread der Bibliothek, der den Port in einer engen Schleife abfragt. Für die Messung ist das kein Problem, der Pi hat vier Kerne.
-- Die Laufzeit ist eine Hochrechnung aus dem bisherigen Durchschnitt und braucht mindestens einen vollständigen Zyklus des Prüflings.
+- Die Laufzeit ist eine Hochrechnung aus dem Durchschnitt seit Projektstart und braucht mindestens einen vollständigen Zyklus des Prüflings. Eine Anlaufphase (Kaltstart, Flashen) drückt sie noch lange nach unten. Für einen Bereich ohne Anlaufphase zeigt die Live-Ansicht „Akku ≙ N Tage“ in der Auswahl, z. B. ab einem Marker bis jetzt.
 - Getestet mit PPK2, `ppk2-api-python` 0.9.2 auf einem Raspberry Pi. Die Bibliotheksversion ist im Dockerfile festgenagelt, weil `ppk2_fast.py` interne Zustände der Bibliothek mitführt.
 
 ## Siehe auch

@@ -11,14 +11,14 @@
     --bg: #fcfcfb; --fg: #0b0b0b; --muted: #52514e; --grid: #e4e3df;
     --env: #2a78d633; --line: #2a78d6; --warn: #c0392b; --panel: #f3f2ef;
     --wake: #eb683424; --wake-edge: #eb6834; --sel: #7a5af520; --sel-edge: #7a5af5;
-    --trig: #c0392b;
+    --trig: #c0392b; --mark: #1a8a5a;
   }
   @media (prefers-color-scheme: dark) {
     :root {
       --bg: #141414; --fg: #ececea; --muted: #a3a29e; --grid: #2b2b29;
       --env: #5b9be640; --line: #5b9be6; --warn: #e5735f; --panel: #1d1d1c;
       --wake: #f0875a2e; --wake-edge: #f0875a; --sel: #9d85ff2a; --sel-edge: #9d85ff;
-      --trig: #e5735f;
+      --trig: #e5735f; --mark: #3fbf86;
     }
   }
   * { box-sizing: border-box; }
@@ -31,6 +31,8 @@
   select, button, input { font: inherit; color: var(--fg); background: var(--panel);
     border: 1px solid var(--grid); border-radius: 6px; padding: 3px 8px; }
   input[type=number] { width: 5.5em; }
+  #win { width: 6.5em; }
+  #win.bad { border-color: var(--warn); }
   button { cursor: pointer; }
   button[aria-pressed="true"] { border-color: var(--line); color: var(--line); }
   button.armed { border-color: var(--trig); color: var(--trig); }
@@ -68,6 +70,14 @@
   tr.old td { color: var(--muted); }
   #wakes { overflow-x: auto; padding-bottom: 16px; }
   .hint { color: var(--muted); font-size: 12px; }
+  #mkBar { display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; }
+  #mkList { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+  .mk { display: inline-flex; gap: 4px; align-items: center; background: var(--panel);
+        border-left: 3px solid var(--mark); border-radius: 6px; padding: 2px 4px 2px 8px;
+        font-variant-numeric: tabular-nums; }
+  .mk.old { opacity: .55; }
+  .mk button { padding: 1px 6px; font-size: 12px; }
+  .mk .mkname { border: none; background: none; font-weight: 600; color: var(--mark); padding: 0 2px; }
   .logo { display: block; color: var(--muted); line-height: 0; }
   .logo:hover { color: var(--fg); }
   .logo svg { height: 30px; width: auto; display: block; }
@@ -76,14 +86,20 @@
 <body>
 <header>
   <h1>PPK2</h1>
-  <nav class="ctl"><a href="./" class="navon">Live</a><a href="auswertung">Auswertung</a></nav>
+  <nav class="ctl"><a href="./" class="navon">Live</a><a href="auswertung">Auswertung</a><a href="projekte">Projekte</a></nav>
   <label class="ctl">Fenster
-    <select id="win">
-      <option value="0.1">0,1 s</option><option value="0.5">0,5 s</option>
-      <option value="2">2 s</option><option value="5">5 s</option>
+    <select id="winPreset" title="feste Fenster">
+      <option value="0.1">0,1 s</option><option value="1">1 s</option>
       <option value="10" selected>10 s</option><option value="30">30 s</option>
-      <option value="60">60 s</option><option value="120">120 s</option>
+      <option value="60">1 min</option><option value="120">2 min</option>
+      <option value="300">5 min</option><option value="900">15 min</option>
+      <option value="1800">30 min</option><option value="3600">1 h</option>
+      <option value="10800">3 h</option><option value="21600">6 h</option>
+      <option value="43200">12 h</option><option value="86400">24 h</option>
+      <option value="frei" disabled>frei</option>
     </select>
+    <input id="win" value="10 s" size="7" autocomplete="off" spellcheck="false"
+           title="frei eingeben, z. B. 0,5 s, 90 s, 15 min, 2 h (Enter)">
   </label>
   <label class="ctl">Skala
     <select id="scale"><option value="log" selected>log</option><option value="lin">linear</option></select>
@@ -94,6 +110,7 @@
   <button id="zin" title="Zoom +">+</button><button id="zout" title="Zoom −">−</button>
   <button id="csv" title="Ausschnitt (oder Auswahl) als CSV, 1-ms-Werte">CSV</button>
   <button id="png" title="Diagramm als Bild">PNG</button>
+  <button id="mkAdd" title="Marker bei jetzt setzen (Rechtsklick ins Diagramm: an dieser Stelle)">Marker</button>
   <span id="status">verbinde …</span>
   <a class="logo" href="https://docbigs-lab.de" target="_blank" rel="noopener" title="DocBigsLab – docbigs-lab.de"><svg viewBox="0 0 2185 607" role="img" aria-label="DocBigsLab"><g transform="translate(0.000000,607.000000) scale(0.100000,-0.100000)" fill="currentColor"><path d="M2520 5739 c-103 -46 -161 -133 -168 -250 -4 -67 -1 -84 20 -130 27 -59 72 -108 131 -142 l38 -22 4 -125 c3 -69 1 -177 -3 -241 l-7 -116 -365 -320 c-201 -176 -527 -463 -725 -637 -198 -174 -363 -316 -367 -316 -5 0 -8 137 -8 305 l0 305 145 0 145 0 0 -59 c0 -33 4 -62 9 -66 5 -3 45 25 90 62 l80 68 0 59 c1 53 -2 61 -33 92 l-35 35 -266 -3 -267 -3 -29 -33 -29 -32 -1 -458 0 -457 -48 -40 c-235 -198 -503 -440 -512 -463 -16 -43 -11 -127 9 -145 31 -28 64 -20 122 30 176 152 1233 1076 1860 1626 162 142 302 263 311 268 18 9 58 -23 404 -326 89 -77 255 -221 370 -320 115 -99 232 -200 260 -225 28 -25 111 -97 185 -160 73 -63 237 -205 364 -315 717 -622 684 -595 718 -595 52 0 79 62 59 136 -14 54 32 12 -896 811 -154 133 -464 402 -690 598 -225 196 -469 407 -542 469 l-132 111 -1 242 0 243 39 19 c168 86 205 326 70 460 -78 78 -211 104 -309 60z"/> <path d="M5987 5345 c-16 -15 -17 -115 -17 -1274 0 -1105 2 -1260 15 -1271 19 -16 515 -22 791 -9 309 14 506 72 669 197 184 141 280 279 360 512 57 164 85 344 85 545 0 108 -18 313 -35 390 -78 371 -245 623 -513 776 -89 51 -174 83 -312 116 -103 25 -114 26 -566 30 -420 4 -462 3 -477 -12z m953 -430 c164 -38 268 -112 358 -253 83 -129 117 -253 130 -462 23 -399 -51 -677 -224 -839 -115 -109 -238 -148 -494 -158 -91 -3 -195 -3 -232 1 l-68 8 0 857 c0 472 3 861 8 865 4 5 106 6 227 4 162 -4 240 -10 295 -23z"/> <path d="M11422 5348 c-16 -16 -18 -2543 -2 -2553 20 -13 901 -17 1005 -5 276 32 411 88 553 229 176 176 239 501 147 755 -55 153 -116 227 -247 303 -43 25 -78 49 -78 54 0 5 13 15 28 23 53 28 160 157 194 236 45 102 63 245 47 363 -24 184 -79 297 -198 409 -116 108 -246 162 -451 188 -124 15 -983 13 -998 -2z m976 -421 c35 -9 84 -29 108 -43 164 -96 166 -407 3 -520 -81 -56 -132 -65 -395 -70 -132 -3 -248 -2 -257 2 -15 6 -17 35 -17 324 0 208 4 319 10 322 6 2 117 3 248 3 190 -1 249 -4 300 -18z m67 -1053 c82 -21 138 -56 185 -115 44 -56 59 -96 67 -184 10 -108 -39 -229 -119 -294 -17 -13 -58 -36 -91 -50 -61 -25 -66 -26 -364 -29 l-303 -4 0 346 0 346 283 0 c223 0 295 -3 342 -16z"/> <path d="M17052 5348 c-17 -17 -18 -2543 -1 -2554 6 -3 293 -6 637 -6 590 0 626 1 639 18 10 13 13 63 13 189 0 153 -2 174 -18 188 -16 15 -64 17 -428 19 l-409 3 -2 1065 c-3 987 -4 1066 -20 1078 -23 17 -394 17 -411 0z"/> <path d="M20080 5341 c-7 -13 -10 -430 -10 -1280 0 -1191 1 -1260 18 -1265 17 -5 161 -9 279 -7 73 1 82 11 92 100 l6 54 53 -45 c65 -56 158 -104 237 -123 178 -42 373 16 509 153 36 37 72 76 80 87 67 100 122 249 148 405 17 102 16 445 -1 535 -43 225 -99 345 -211 456 -204 202 -537 211 -739 22 l-56 -53 -5 480 c-4 413 -7 482 -20 490 -8 5 -95 10 -192 10 -165 0 -178 -1 -188 -19z m853 -1184 c47 -28 79 -64 114 -127 75 -136 84 -484 18 -686 -23 -69 -80 -142 -139 -179 -46 -28 -56 -30 -145 -30 -108 0 -150 16 -208 77 -85 89 -108 201 -101 496 4 163 9 208 26 260 27 83 63 134 123 172 67 44 92 50 185 47 67 -3 89 -8 127 -30z"/> <path d="M13544 5294 c-23 -8 -58 -31 -78 -50 -55 -53 -71 -97 -71 -190 0 -72 3 -86 30 -130 104 -167 352 -147 434 36 54 118 -1 270 -117 326 -49 24 -146 28 -198 8z"/> <path d="M4368 4620 c-175 -30 -371 -148 -470 -284 -34 -47 -35 -75 -5 -104 41 -39 68 -29 155 57 60 60 99 88 163 120 268 133 581 60 754 -174 58 -78 80 -89 126 -64 61 32 36 110 -74 226 -170 178 -414 262 -649 223z"/> <path d="M8692 4559 c-269 -45 -477 -227 -575 -504 -42 -122 -52 -196 -52 -405 1 -204 8 -256 51 -388 81 -240 265 -415 504 -477 136 -35 343 -30 469 11 128 42 197 82 275 160 100 100 135 154 186 285 66 170 91 361 71 547 -25 228 -76 370 -185 509 -161 206 -456 310 -744 262z m236 -373 c139 -37 214 -122 258 -291 14 -54 18 -109 18 -240 0 -157 -2 -176 -27 -256 -33 -107 -77 -174 -140 -216 -66 -44 -117 -58 -212 -57 -141 1 -235 64 -295 197 -46 104 -55 158 -55 342 0 185 7 228 57 330 41 83 71 120 125 152 84 49 180 63 271 39z"/> <path d="M10418 4560 c-272 -46 -489 -240 -581 -520 -43 -130 -52 -195 -52 -385 0 -188 6 -235 51 -375 104 -324 373 -521 711 -520 177 1 314 39 438 121 103 69 205 187 187 216 -20 30 -246 223 -262 223 -11 0 -32 -19 -50 -45 -37 -54 -117 -110 -186 -131 -58 -18 -156 -20 -212 -4 -105 28 -196 130 -242 270 -22 68 -25 91 -25 250 0 155 3 183 23 245 46 140 96 210 182 252 97 46 155 53 245 29 98 -26 130 -49 223 -160 13 -15 28 -26 33 -24 18 6 258 203 263 217 10 22 -50 106 -124 174 -94 87 -215 144 -352 167 -72 11 -201 11 -270 0z"/> <path d="M16110 4559 c-192 -32 -340 -135 -416 -290 -98 -198 -62 -444 85 -589 71 -71 166 -117 344 -169 253 -74 317 -117 317 -212 0 -99 -60 -162 -174 -182 -138 -23 -281 21 -406 128 -35 30 -67 55 -70 55 -14 -1 -104 -100 -189 -207 -40 -50 -37 -59 46 -130 132 -113 228 -158 398 -188 330 -59 644 76 737 317 51 132 59 243 27 358 -62 226 -180 312 -589 431 -79 23 -144 56 -174 88 -25 26 -30 40 -30 81 0 64 18 96 74 128 41 25 54 27 145 26 86 -1 108 -5 159 -28 33 -14 83 -47 112 -71 29 -25 57 -45 62 -45 16 0 212 231 212 250 0 21 -79 99 -140 140 -65 43 -185 87 -285 105 -96 16 -161 17 -245 4z"/> <path d="M19015 4556 c-174 -33 -336 -123 -428 -238 -28 -35 -29 -39 -15 -60 33 -50 190 -218 204 -218 8 0 42 23 75 50 95 79 176 110 288 110 88 0 138 -17 187 -65 48 -46 62 -86 71 -197 5 -63 3 -78 -8 -79 -8 0 -77 0 -154 1 -240 2 -420 -39 -551 -126 -145 -96 -218 -245 -217 -444 1 -109 21 -200 60 -273 36 -66 126 -156 189 -190 62 -33 191 -67 256 -67 58 0 178 25 227 47 47 21 149 93 180 127 31 33 41 33 41 0 0 -40 21 -101 42 -124 17 -19 31 -20 187 -20 188 0 192 1 193 67 0 26 -8 52 -26 77 -24 37 -26 46 -26 160 0 622 -8 995 -22 1054 -48 196 -184 337 -378 392 -97 27 -278 35 -375 16z m383 -1100 c5 -155 -41 -246 -159 -311 -50 -28 -61 -30 -159 -30 -98 0 -108 2 -147 27 -73 48 -104 135 -79 222 16 53 61 106 118 137 57 31 162 48 293 46 l130 -2 3 -89z"/> <path d="M14565 4546 c-138 -37 -205 -75 -301 -170 -123 -124 -184 -284 -184 -484 1 -181 53 -322 161 -435 48 -50 58 -67 40 -67 -20 0 -109 -92 -136 -142 -27 -48 -30 -62 -30 -143 0 -80 3 -95 27 -137 16 -25 46 -62 68 -81 22 -18 40 -36 40 -40 0 -3 -19 -16 -43 -30 -59 -35 -131 -109 -155 -161 -69 -145 -40 -316 71 -424 44 -43 131 -95 207 -126 131 -53 349 -76 538 -57 217 22 377 88 493 202 94 93 132 175 147 314 22 202 -61 370 -221 448 -133 66 -256 87 -503 87 -201 0 -273 12 -315 51 -33 31 -39 80 -13 117 26 38 47 43 108 27 72 -19 290 -19 366 -1 178 44 319 148 393 292 75 143 88 353 33 504 -15 41 -30 87 -33 102 -5 26 -5 26 74 33 43 4 84 12 91 17 8 8 12 51 12 154 l0 144 -25 12 c-38 17 -189 -4 -309 -43 -88 -29 -102 -31 -130 -20 -151 62 -158 64 -291 67 -86 2 -147 -1 -180 -10z m255 -341 c109 -20 200 -159 200 -307 0 -66 -36 -170 -76 -217 -50 -58 -107 -81 -204 -81 -61 0 -91 5 -125 21 -57 27 -119 96 -139 156 -21 60 -21 195 0 255 19 58 74 123 127 150 43 21 127 38 162 33 11 -2 36 -7 55 -10z m-90 -1445 c288 -14 351 -29 390 -93 26 -42 26 -121 1 -163 -43 -71 -142 -115 -294 -132 -195 -22 -377 24 -441 111 -31 42 -30 150 3 195 25 35 96 92 115 92 6 0 108 -5 226 -10z"/> <path d="M13436 4534 c-14 -14 -16 -104 -14 -877 l3 -862 180 -3 c99 -1 190 0 203 3 l22 5 0 863 c0 658 -3 866 -12 875 -8 8 -65 12 -189 12 -148 0 -180 -3 -193 -16z"/> <path d="M4385 4276 c-143 -36 -275 -140 -275 -217 0 -30 38 -69 68 -69 12 0 49 25 83 55 109 98 239 119 364 59 30 -14 69 -43 89 -67 67 -79 75 -87 96 -87 28 0 70 43 70 73 0 61 -103 171 -205 218 -98 47 -197 58 -290 35z"/> <path d="M4435 3935 c-104 -37 -124 -160 -39 -235 28 -24 44 -30 82 -30 59 0 108 29 128 75 50 120 -52 233 -171 190z"/> <path d="M2549 3796 c-203 -54 -277 -315 -134 -474 25 -28 66 -60 90 -72 l45 -22 0 -354 0 -354 -48 -24 c-26 -13 -67 -45 -89 -69 -127 -138 -77 -383 94 -459 l43 -19 0 -672 c0 -639 -1 -674 -19 -714 -35 -77 5 -73 -768 -73 -530 0 -694 3 -713 13 -13 7 -35 28 -47 46 l-23 34 0 1083 c0 1071 0 1084 -20 1104 -25 25 -46 25 -87 0 -68 -41 -64 48 -61 -1161 l3 -1094 24 -45 c32 -61 67 -97 126 -128 l50 -27 745 0 c843 0 781 -6 867 82 76 78 73 49 73 845 l0 709 38 16 c63 26 109 70 141 135 41 80 43 177 7 253 -27 59 -98 128 -149 144 l-37 13 0 359 0 359 36 15 c101 42 176 152 177 262 1 139 -78 250 -206 288 -60 18 -96 18 -158 1z m123 -136 c45 -13 95 -68 104 -116 9 -51 -11 -107 -51 -143 -97 -85 -245 -18 -245 112 0 77 28 118 97 143 47 16 49 16 95 4z m37 -1299 c48 -34 66 -69 66 -126 0 -58 -18 -91 -69 -129 -35 -27 -121 -28 -160 -2 -69 44 -88 149 -41 219 14 20 27 37 28 37 1 0 20 7 42 15 46 17 99 12 134 -14z"/> <path d="M1818 3159 c-26 -4 -70 -20 -98 -35 -198 -108 -196 -405 4 -510 48 -25 56 -33 61 -66 4 -20 5 -191 3 -380 l-3 -343 108 -104 107 -104 0 -82 0 -82 -56 -2 c-197 -4 -324 -212 -244 -399 l22 -52 -42 -50 -42 -50 -88 0 c-67 0 -91 4 -101 16 -54 66 -172 55 -219 -20 -32 -53 -25 -134 15 -176 57 -59 149 -59 199 0 l25 30 115 0 115 0 63 75 c53 63 67 74 88 70 147 -27 227 -7 303 74 62 66 80 110 80 196 1 75 -27 157 -64 191 -17 15 -19 32 -19 168 l0 151 -110 108 -109 108 1 112 c0 62 3 218 5 349 l5 236 42 19 c170 76 222 309 100 452 -68 79 -164 115 -266 100z m122 -162 c98 -66 96 -213 -4 -261 -137 -65 -275 71 -208 204 38 77 142 105 212 57z m80 -1695 c49 -24 80 -75 80 -131 0 -152 -190 -207 -271 -79 -26 42 -22 126 8 166 24 34 78 62 118 62 17 0 46 -8 65 -18z"/> <path d="M3275 3136 c-184 -87 -228 -333 -85 -476 20 -20 56 -45 81 -57 l46 -21 -1 -347 -1 -347 -110 -101 c-60 -55 -113 -107 -117 -116 -4 -9 -7 -192 -7 -406 -1 -323 1 -394 13 -411 8 -11 56 -38 107 -60 75 -32 96 -46 115 -76 39 -62 135 -76 182 -25 50 53 51 125 2 172 -32 30 -96 43 -128 26 -17 -9 -32 -6 -81 15 l-61 27 0 341 0 341 115 103 c75 68 115 111 116 125 1 12 2 183 3 380 l1 358 60 33 c130 71 183 207 140 353 -19 65 -85 139 -150 169 -70 33 -171 33 -240 0z m211 -147 c73 -68 73 -170 0 -238 -39 -37 -128 -41 -176 -9 -40 27 -70 79 -70 124 0 46 40 114 80 136 49 27 130 21 166 -13z"/> <path d="M4386 2744 c-14 -14 -16 -81 -16 -582 -1 -1410 -3 -1574 -23 -1609 -35 -65 -7 -63 -747 -63 l-672 0 -29 -29 c-41 -41 -37 -102 10 -138 12 -9 179 -12 703 -13 671 0 689 0 743 21 68 25 136 91 161 156 18 46 19 104 22 1121 l2 1074 -39 39 c-42 43 -87 52 -115 23z"/> <path d="M12570 1539 c-120 -53 -181 -178 -150 -308 25 -106 89 -157 263 -211 122 -37 153 -53 172 -90 19 -37 19 -54 -2 -97 -21 -44 -79 -73 -148 -73 -62 0 -121 26 -168 74 -20 20 -40 36 -44 36 -11 0 -113 -90 -113 -99 0 -4 17 -25 38 -45 98 -99 246 -138 385 -102 73 19 105 37 149 83 50 53 68 102 68 187 0 61 -5 79 -31 124 -46 80 -82 100 -323 174 -111 34 -132 153 -36 207 67 38 150 25 229 -35 24 -19 47 -34 51 -34 3 0 25 20 49 44 43 44 44 45 28 70 -23 34 -73 71 -130 95 -67 29 -221 29 -287 0z"/> <path d="M15894 1548 c-14 -21 -15 -593 -3 -668 18 -101 60 -172 129 -215 44 -28 142 -55 196 -55 49 1 140 22 179 43 44 22 101 83 123 131 38 81 43 138 40 456 l-3 305 -77 3 -78 3 0 -314 c0 -351 -5 -383 -65 -436 -61 -53 -169 -53 -231 1 -62 55 -64 65 -64 424 l0 324 -54 0 c-30 0 -61 3 -69 6 -8 3 -19 -1 -23 -8z"/> <path d="M17633 1539 c-65 -25 -145 -96 -171 -151 -50 -108 -67 -343 -36 -494 27 -129 75 -198 171 -246 80 -39 160 -47 246 -25 121 32 183 91 229 218 20 58 23 82 23 244 0 126 -4 195 -14 230 -31 110 -118 203 -214 232 -64 19 -173 15 -234 -8z m200 -139 c77 -37 107 -109 114 -277 11 -228 -40 -339 -165 -359 -57 -9 -124 17 -158 61 -42 56 -54 114 -54 266 0 194 26 266 112 307 55 27 97 27 151 2z"/> <path d="M18303 1548 c-7 -9 -9 -157 -4 -468 l6 -455 64 3 c35 1 67 5 70 8 3 3 7 94 7 202 4 397 0 378 49 262 15 -36 33 -78 40 -95 7 -16 27 -64 44 -105 61 -144 49 -130 111 -130 l55 0 29 73 c16 39 41 99 56 132 14 33 40 93 56 132 16 40 33 72 37 70 6 -2 14 -249 17 -508 l0 -36 58 -7 c101 -11 92 -55 92 453 0 245 -4 452 -9 459 -5 9 -29 12 -81 10 l-74 -3 -66 -155 c-36 -85 -88 -208 -114 -272 -42 -103 -66 -142 -66 -108 0 5 -13 38 -29 72 -55 122 -69 154 -114 263 -25 61 -55 131 -67 158 l-21 47 -54 0 c-29 0 -60 2 -68 5 -7 3 -18 0 -24 -7z"/> <path d="M20012 1546 c-7 -12 -6 -121 1 -133 3 -5 54 -11 114 -12 59 -1 111 -5 115 -7 4 -3 8 -176 8 -384 l0 -378 64 -7 c36 -4 69 -4 75 0 8 4 11 125 11 385 0 365 1 380 19 390 11 5 67 10 125 10 l106 0 2 50 c1 28 2 58 2 68 1 16 -22 17 -317 22 -191 3 -321 1 -325 -4z"/> <path d="M6018 1513 c-6 -45 1 -862 8 -882 4 -12 41 -13 223 -8 194 4 223 7 268 27 60 25 106 70 128 124 22 53 22 173 0 220 -20 41 -59 83 -86 91 -25 8 -24 31 1 45 11 6 31 31 46 56 23 38 27 59 28 118 0 61 -4 79 -27 118 -15 26 -39 56 -54 68 -63 50 -86 54 -314 58 l-216 4 -5 -39z m371 -109 c17 -4 42 -18 56 -32 21 -21 25 -34 25 -82 0 -48 -4 -61 -26 -83 -32 -33 -64 -39 -179 -35 l-90 3 -3 104 c-1 58 0 111 2 118 6 14 154 19 215 7z m82 -423 c44 -44 51 -88 24 -142 -30 -57 -65 -69 -202 -69 l-123 0 0 125 0 125 131 0 131 0 39 -39z"/> <path d="M6854 1536 c-3 -8 -4 -164 -2 -348 5 -371 7 -389 74 -466 83 -97 217 -133 364 -98 31 7 69 20 86 29 48 25 110 99 133 161 20 54 21 74 21 396 l0 340 -75 0 -75 0 0 -312 c0 -198 -4 -328 -11 -353 -17 -59 -74 -112 -131 -120 -107 -16 -192 32 -217 120 -7 25 -11 155 -11 353 l0 312 -75 0 c-56 0 -77 -4 -81 -14z"/> <path d="M7770 1091 l0 -458 38 -7 c57 -9 97 -7 110 6 13 13 17 617 5 811 l-6 107 -74 0 -73 0 0 -459z"/> <path d="M8176 1408 c-9 -196 -7 -776 3 -782 4 -3 128 -2 275 1 l267 6 -3 66 -3 66 -185 3 c-101 1 -188 6 -193 11 -4 4 -8 173 -8 376 0 202 -3 374 -6 381 -4 10 -24 14 -73 14 l-67 0 -7 -142z"/> <path d="M8898 1394 c-2 -88 -4 -296 -4 -464 l1 -305 195 2 c175 2 202 4 255 24 82 31 164 113 188 189 28 87 40 196 33 310 -10 172 -39 248 -120 314 -86 71 -118 79 -342 84 l-201 4 -5 -158z m395 -6 c40 -23 69 -52 90 -93 20 -36 22 -56 22 -205 0 -162 -1 -166 -28 -215 -15 -27 -44 -61 -65 -75 -34 -23 -47 -25 -147 -25 l-110 0 -3 313 -2 312 110 0 c70 0 119 -5 133 -12z"/> <path d="M10870 1481 l0 -69 125 -7 125 -7 2 -387 3 -386 65 3 c36 2 67 6 69 7 2 2 3 173 2 379 -2 297 1 376 11 382 7 5 63 7 124 5 l111 -3 6 61 c4 33 4 67 1 76 -5 13 -48 15 -325 15 l-319 0 0 -69z"/> <path d="M11680 1090 l0 -460 28 -2 c83 -4 510 -6 525 -1 16 4 18 14 15 71 l-4 67 -201 3 -201 2 -7 104 c-10 157 -24 145 173 148 l167 3 0 70 0 70 -159 2 c-87 1 -165 4 -172 7 -11 4 -14 31 -14 110 0 58 4 107 9 110 5 3 95 8 200 10 105 3 195 7 199 10 4 2 5 34 4 70 l-4 66 -279 0 -279 0 0 -460z"/> <path d="M13135 1530 c-4 -12 -4 -43 0 -71 l7 -49 81 -2 c45 -1 96 -2 114 -2 17 -1 35 -5 39 -9 5 -4 9 -178 10 -385 1 -207 2 -380 3 -384 1 -10 62 -10 113 -2 l38 7 2 386 3 386 65 0 c36 0 91 1 123 3 l58 2 -3 68 -3 67 -322 3 c-318 2 -322 2 -328 -18z"/> <path d="M15306 1542 c-3 -5 -12 -31 -21 -58 -9 -27 -20 -58 -25 -69 -4 -11 -24 -69 -44 -130 -20 -60 -61 -184 -92 -275 -118 -350 -125 -373 -116 -382 5 -5 40 -8 78 -6 l69 3 32 95 c26 77 36 97 56 104 15 5 81 5 163 0 l139 -9 29 -90 c16 -49 33 -93 38 -96 5 -3 38 -7 74 -8 46 -1 66 2 69 11 5 12 -244 781 -286 886 -13 32 -13 32 -86 32 -39 0 -74 -4 -77 -8z m113 -302 c13 -41 27 -88 31 -105 5 -16 15 -56 24 -88 9 -32 16 -62 16 -67 0 -6 -47 -10 -110 -10 -60 0 -110 4 -110 9 0 11 87 297 101 330 13 32 21 20 48 -69z"/> <path d="M16692 1479 l3 -72 95 2 c53 1 103 -1 113 -5 16 -6 17 -36 17 -390 l0 -384 23 -5 c13 -4 48 -5 78 -3 l54 3 3 386 2 387 55 7 c30 3 82 5 115 4 33 -1 65 2 71 8 5 5 9 37 7 69 l-3 59 -318 3 -318 2 3 -71z"/> <path d="M19543 1538 c-6 -7 -34 -85 -63 -173 -29 -88 -58 -176 -65 -195 -7 -19 -27 -78 -43 -130 -17 -52 -42 -126 -55 -165 -48 -135 -78 -236 -72 -245 7 -11 114 -14 138 -4 8 3 27 48 43 100 l29 94 70 0 c38 0 106 3 150 6 100 8 103 6 135 -110 l24 -86 78 0 c43 0 78 4 78 8 0 5 -9 35 -19 68 -10 32 -47 147 -81 254 -34 107 -91 284 -127 393 l-65 197 -73 0 c-46 0 -76 -5 -82 -12z m97 -250 c11 -41 61 -212 81 -272 5 -15 6 -32 3 -37 -3 -5 -52 -9 -110 -9 -117 0 -113 -3 -89 76 9 27 20 63 25 79 41 142 63 205 71 205 4 0 13 -19 19 -42z"/> <path d="M20820 1091 l0 -459 86 -7 c85 -7 460 -3 468 6 2 2 6 33 7 69 l3 65 -202 3 c-236 3 -215 -12 -210 147 l3 100 173 3 173 2 -3 73 -3 72 -165 3 c-116 2 -166 6 -172 15 -11 17 -10 205 2 212 5 3 97 8 205 12 l195 6 0 69 0 68 -280 0 -280 0 0 -459z"/> <path d="M3534 1517 c-2 -7 -3 -67 -2 -133 l3 -119 115 0 115 0 0 130 0 130 -113 3 c-87 2 -114 0 -118 -11z"/> <path d="M3894 1517 c-2 -7 -3 -67 -2 -133 l3 -119 115 0 115 0 3 133 3 132 -116 0 c-86 0 -117 -3 -121 -13z"/> <path d="M10171 1202 c-19 -9 -48 -34 -64 -54 -25 -31 -30 -46 -29 -92 1 -107 67 -176 171 -176 97 0 171 76 171 177 0 124 -136 203 -249 145z"/> <path d="M14310 1199 c-57 -33 -80 -75 -80 -146 0 -69 23 -112 79 -150 40 -27 117 -31 159 -9 74 39 115 125 93 198 -7 23 -20 52 -28 65 -39 60 -155 82 -223 42z"/> <path d="M3542 1132 c-9 -6 -12 -40 -10 -133 l3 -124 118 -3 118 -3 -3 133 -3 133 -105 3 c-58 1 -111 -2 -118 -6z"/> <path d="M3897 1134 c-4 -4 -7 -65 -7 -136 l0 -129 118 3 117 3 0 130 0 130 -111 3 c-60 1 -113 -1 -117 -4z"/></g></svg></a>
 </header>
@@ -118,7 +135,7 @@
   </div>
 </div>
 <div class="group">
-  <h2>Logger</h2>
+  <h2>Logger<span id="projName"></span></h2>
   <div class="stats">
     <div class="stat"><span id="lqT">Ruhestrom</span><b id="lq">–</b></div>
     <div class="stat"><span>Laufzeit geschätzt</span><b id="ld">–</b><small id="ldSub"></small></div>
@@ -135,9 +152,19 @@
 </div>
 <div id="viewinfo"></div>
 <div class="group">
+  <h2>Marker</h2>
+  <div id="mkBar">
+    <label class="ctl">von <select id="mkFrom"></select></label>
+    <label class="ctl">bis <select id="mkTo"></select></label>
+    <button id="mkShow">Anzeigen</button>
+    <span class="hint">Marker setzen: Knopf „Marker“ (jetzt) oder Rechtsklick ins Diagramm. Name ändern: Klick auf den Namen. Gespeichert nur in diesem Browser.</span>
+  </div>
+  <div id="mkList"></div>
+</div>
+<div class="group">
   <h2>Letzte Wachphasen</h2>
   <div id="wakes"><span class="hint">keine Daten</span></div>
-  <div class="hint">Ziehen: Bereich ausmessen · Mausrad: Zoom · Shift+Mausrad: verschieben · Doppelklick: live · Klick auf Zeile: zur Wachphase springen (nur letzte 2 min)</div>
+  <div class="hint">Ziehen: Bereich ausmessen · Mausrad: Zoom · Shift+Mausrad: verschieben · Doppelklick: live · Klick auf Zeile: zur Wachphase springen · über 2 min Fenster: 100-ms-Auflösung</div>
 </div>
 <script>
 "use strict";
@@ -150,12 +177,30 @@ function alloc() {
   mn.fill(NaN); mx.fill(NaN); av.fill(NaN);
 }
 alloc();
+// Grobe Stufe (100 ms): Bucket j = feine Buckets j*R … j*R+R-1. Älteres per /verlauf,
+// Neues aus dem Stream hier zusammengefasst. ct = Wanduhrzeit am Bucket-Ende.
+let R = 100, ccap = 0, cmn, cmx, cav, ccn, ct;
+let cFineEnd = 0;          // feine Sequenz bis hierher zusammengefasst
+let cStreamFirst = null;   // erster grober Bucket aus dem Stream
+let cLoaded = null;        // ab hier (grob) ist geladen
+let cOldest = 0;           // ältester grober Bucket beim Logger
+let cFetching = false, longS = 0;
+let cGaps = [], cGapBusy = false, cGapWait = 0;   // [j0, j1): Lücken im Stream (z. B. Rechner im Ruhezustand)
+function allocCoarse(n) {
+  ccap = n;
+  cmn = new Float32Array(n).fill(NaN); cmx = new Float32Array(n).fill(NaN);
+  cav = new Float32Array(n).fill(NaN); ccn = new Uint16Array(n); ct = new Float64Array(n).fill(NaN);
+}
+fetch("info").then(r => r.json()).then(j => {
+  if (j.coarse && j.coarse_size) { R = j.coarse; allocCoarse(j.coarse_size); longS = j.long_s || 0; }
+}).catch(() => {});
 let seqEnd = 0, tEnd = 0, gotAny = false, lastMsg = 0, status = {};
 let win = 10;                         // Fensterbreite in s
 let frozenEnd = null;                 // null = live, sonst feste rechte Kante (seq)
 let sel = null;                       // {a, b} in seq, a < b
 let trig = { state: "off", T: null, endAt: null, sum: 0, n: 0, from: 0, below: false };
 let wakes = [], wakeCount = -1, trigTouched = false;
+let follow = null;                    // {t}: live ab Marker, Fenster wächst mit
 let yAx = null, yHold = false;        // y-Bereich mit Hysterese: {log, y0, y1, shrinkSince}
 const $ = id => document.getElementById(id);
 const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
@@ -175,7 +220,8 @@ function fmtQ(uAh) {
 function fmtS(s) {
   if (!isFinite(s)) return "–";
   return s < 1 ? (s * 1000).toFixed(s < 0.01 ? 1 : 0) + " ms" : s < 60 ? s.toFixed(s < 10 ? 3 : 2) + " s"
-       : Math.floor(s / 60) + " min " + (s % 60).toFixed(0) + " s";
+       : s < 3599.5 ? (r => Math.floor(r / 60) + " min " + (r % 60) + " s")(Math.round(s))   // 119,6 s → 2 min 0 s
+       : (r => Math.floor(r / 60) + " h " + (r % 60) + " min")(Math.round(s / 60));
 }
 function fmtClock(t, ms) {
   const d = new Date(t * 1000);
@@ -188,8 +234,33 @@ function fmtClock(t, ms) {
 // damit die Zeitachse dann nicht zittert.
 let tOff = null, frozenOff = null;
 const tBase = () => (frozenEnd !== null && frozenOff !== null) ? frozenOff : tOff;
-const tOf = s => tBase() + s * dt;                     // Wanduhrzeit eines Buckets
-const seqOf = t => (t - tBase()) / dt;
+// Ältere Daten (außerhalb des feinen Puffers) über die Zeitmarken der groben Stufe,
+// sonst liefe die Achse bei Stunden durch die Abweichung der Samplerate davon.
+const fineOldest = () => seqEnd - cap + 1;
+function tOf(s) {
+  if (ccap && s < fineOldest()) {
+    const j = Math.floor(s / R);
+    if (j >= 0 && j > seqEnd / R - ccap) {
+      const t = ct[j % ccap];
+      if (t === t) return t - ((j + 1) * R - s) * dt;
+    }
+  }
+  return tBase() + s * dt;
+}
+function seqOf(t) {
+  const s = (t - tBase()) / dt;
+  if (!ccap || s >= fineOldest() || cLoaded === null) return s;
+  let lo = Math.max(cLoaded, Math.ceil(seqEnd / R) - ccap + 1, 0), hi = Math.floor(fineOldest() / R);
+  if (hi <= lo) return s;
+  const T = j => ct[j % ccap];
+  if (!(T(lo) === T(lo)) || t <= T(lo)) return (T(lo) === T(lo) ? (lo + 1) * R - (T(lo) - t) / dt : s);
+  while (hi - lo > 1) {                         // ct steigt: erstes j mit ct[j] >= t
+    const m = (lo + hi) >> 1, v = T(m);
+    if (v === v && v < t) lo = m; else hi = m;
+  }
+  const v = T(hi);
+  return v === v ? (hi + 1) * R - (v - t) / dt : s;
+}
 
 // ---------- Daten
 function onData(m) {
@@ -208,11 +279,95 @@ function onData(m) {
     if (tOff === null || Math.abs(o - tOff) > 0.5) tOff = o;   // Start oder Sprung (Neustart)
     else tOff += 0.05 * (o - tOff);
   }
+  if (ccap && tOff !== null) coarseAdd(m);
   gotAny = true; lastMsg = performance.now();
   checkTrigger(Math.max(prevEnd, m.start), seqEnd);
 }
+function coarseAdd(m) {
+  if (cStreamFirst === null) {
+    cStreamFirst = Math.ceil(m.start / R); cFineEnd = cStreamFirst * R; cLoaded = cStreamFirst;
+  }
+  let jCur = Math.floor((cFineEnd - 1) / R);
+  if (m.start > cFineEnd) {                     // Stream hatte eine Lücke: beim Logger nachholen
+    cGaps.push([Math.floor(cFineEnd / R), Math.floor(m.start / R) + 1]);
+    setTimeout(fillGaps, 500);
+  }
+  for (let k = Math.max(0, cFineEnd - m.start); k < m.min.length; k++) {
+    const s = m.start + k, j = Math.floor(s / R);
+    if (j !== jCur) {                           // neuer Bucket (auch über Lücken): leeren
+      for (let x = Math.max(jCur + 1, j - ccap + 1); x <= j; x++) {
+        const i = x % ccap; cmn[i] = cmx[i] = cav[i] = NaN; ccn[i] = 0; ct[i] = NaN;
+      }
+      jCur = j;
+    }
+    const i = j % ccap, a = m.min[k], b = m.max[k], v = m.avg[k];
+    if (a !== a) continue;
+    const n = ccn[i];
+    cmn[i] = n ? Math.min(cmn[i], a) : a; cmx[i] = n ? Math.max(cmx[i], b) : b;
+    cav[i] = n ? (cav[i] * n + v) / (n + 1) : v; ccn[i] = n + 1;
+    ct[i] = tOff + (j + 1) * R * dt;
+  }
+  cFineEnd = Math.max(cFineEnd, m.end);
+}
+// Fehlende ältere Daten der groben Stufe holen (nur rückwärts, ab cLoaded)
+async function loadCoarse(jFrom) {
+  if (cFetching || cLoaded === null || jFrom >= cLoaded || cLoaded <= cOldest) return;
+  cFetching = true;
+  try {
+    const bis = cLoaded, von = Math.max(jFrom, bis - ccap + 1, cOldest);
+    const r = await fetch("verlauf?von=" + von + "&bis=" + bis);
+    if (!r.ok) throw new Error(r.status);
+    const v0 = +r.headers.get("X-Von"), v1 = +r.headers.get("X-Bis"), buf = await r.arrayBuffer();
+    const n = v1 - v0, T = new Float64Array(buf, 0, n), D = new Float32Array(buf, n * 8, n * 3);
+    for (let k = 0; k < n; k++) {
+      const j = v0 + k;
+      if (j >= cStreamFirst || j <= Math.ceil(seqEnd / R) - ccap) continue;
+      const i = j % ccap;
+      cmn[i] = D[3 * k]; cmx[i] = D[3 * k + 1]; cav[i] = D[3 * k + 2]; ct[i] = T[k];
+      ccn[i] = D[3 * k] === D[3 * k] ? R : 0;
+    }
+    if (n > 0) cLoaded = Math.min(cLoaded, v0);
+    if (n === 0 || v0 > von) cOldest = n > 0 ? v0 : bis;   // älter hat der Logger nichts
+  } catch (_) {
+  } finally { cFetching = false; }
+}
+// Lücken der groben Stufe aus /verlauf füllen (der Logger hat die Daten lückenlos)
+async function fillGaps() {
+  if (cGapBusy || !cGaps.length || performance.now() < cGapWait) return;
+  cGapBusy = true;
+  try {
+    while (cGaps.length) {
+      const g = cGaps[0], done = Math.floor(cFineEnd / R);   // ab hier füllt noch der Stream
+      g[0] = Math.max(g[0], Math.ceil(seqEnd / R) - ccap + 1, 0);
+      g[1] = Math.min(g[1], done);
+      if (g[1] <= g[0]) { cGaps.shift(); continue; }
+      const von = g[0], bis = Math.min(g[1], von + 36000);     // höchstens 1 h pro Abruf
+      const r = await fetch("verlauf?von=" + von + "&bis=" + bis);
+      if (!r.ok) throw new Error(r.status);
+      const v0 = +r.headers.get("X-Von"), v1 = +r.headers.get("X-Bis"), buf = await r.arrayBuffer();
+      const n = v1 - v0, T = new Float64Array(buf, 0, n), D = new Float32Array(buf, n * 8, n * 3);
+      for (let k = 0; k < n; k++) {
+        const j = v0 + k;
+        if (j <= Math.ceil(seqEnd / R) - ccap || j >= Math.floor(cFineEnd / R)) continue;
+        const i = j % ccap;
+        cmn[i] = D[3 * k]; cmx[i] = D[3 * k + 1]; cav[i] = D[3 * k + 2]; ct[i] = T[k];
+        ccn[i] = D[3 * k] === D[3 * k] ? R : 0;
+      }
+      g[0] = bis;
+    }
+  } catch (_) {
+    cGapWait = performance.now() + 5000;        // später neu versuchen
+    setTimeout(fillGaps, 5100);
+  } finally { cGapBusy = false; }
+}
+let lastProj = null;
 function onStatus(st) {
   status = st;
+  $("projName").textContent = st.projekt ? " · Projekt " + st.projekt : "";
+  if (st.projekt_slug !== undefined && st.projekt_slug !== lastProj) {
+    if (lastProj !== null) { wakeCount = st.wake_count; loadWakes(); }
+    lastProj = st.projekt_slug;
+  }
   if (st.wake_count !== undefined && st.wake_count !== wakeCount) { wakeCount = st.wake_count; loadWakes(); }
   if (!trigTouched && st.wake_trigger_uA) $("trigLevel").value = +(st.wake_trigger_uA / 1000).toFixed(2);
   const q = st.quiet_avg_uA;
@@ -226,7 +381,7 @@ function onStatus(st) {
   if (st.wake_capture) {
     $("lw").textContent = (st.wake_rec ? "läuft · " : "") + (st.wake_count ?? 0);
     $("lwSub").textContent = st.wake_last_uAh !== undefined ? "letzte " + fmtQ(st.wake_last_uAh) + ", " + fmtS(st.wake_last_s) : "";
-  } else { $("lw").textContent = "aus"; $("lwSub").textContent = "WAKE_CAPTURE=0"; }
+  } else { $("lw").textContent = "aus"; $("lwSub").textContent = st.projekt ? "im Projekt abgeschaltet" : "WAKE_CAPTURE=0"; }
   $("lr").textContent = st.samples && st.interval_s ? (st.samples / st.interval_s / 1000).toFixed(1) + " kSps" : "–";
 }
 
@@ -242,7 +397,7 @@ connect();
 // ---------- Wachphasen
 async function loadWakes() {
   try {
-    const r = await fetch("wakes?n=20"); const j = await r.json();
+    const r = await fetch("wakes?n=200"); const j = await r.json();
     wakes = j.wakes.map(w => {
       const t0 = Date.parse(w.trigger_utc) / 1000;
       return Object.assign(w, { t0, t1: t0 + (w.active_s || 0), tStart: Date.parse(w.start_utc) / 1000 });
@@ -255,9 +410,9 @@ function renderWakes(available) {
     $("wakes").innerHTML = '<span class="hint">' + (available === false ? "Wachphasen-Aufnahme aus (WAKE_CAPTURE=0)" : "noch keine Wachphase erfasst") + "</span>";
     return;
   }
-  const oldest = tOf(seqEnd - cap + 1);
+  const oldest = tOf(oldestSeq());
   let h = "<table><tr><th>Zeit</th><th>aktiv</th><th>Ladung aktiv</th><th>gesamt</th><th>Mittel</th><th>Spitze 1 ms</th><th>Hinweis</th></tr>";
-  wakes.forEach((w, i) => {
+  wakes.slice(0, 20).forEach((w, i) => {   // Tabelle: 20, Bänder: alle
     const inbuf = gotAny && w.tStart > oldest;
     const d = new Date(w.t0 * 1000);
     const day = d.toLocaleDateString("de-DE", { day: "2-digit", month: "2-digit" });
@@ -334,13 +489,29 @@ function resize() {
 }
 window.addEventListener("resize", resize); resize();
 
+// Ältester anzeigbarer feiner Index: grobe Stufe, falls vorhanden, sonst feiner Puffer
+function oldestSeq() {
+  if (!ccap) return seqEnd - cap + 1;
+  return Math.max(seqEnd - (ccap - 2) * R, cOldest * R, 0);
+}
+// Fenster nur auf die feste Obergrenze begrenzen (Verlauf des Loggers); was es noch
+// nicht gibt, bleibt leer. Angehalten: nicht vor den ältesten Wert und nicht hinter jetzt.
 function clampView() {
+  const maxS = ccap ? (ccap - 2) * R * dt : 7 * 86400;
+  win = Math.min(Math.max(win, 0.02), maxS);
   const nb = Math.round(win / dt);
   if (frozenEnd !== null) {
+    frozenEnd = Math.max(frozenEnd, oldestSeq() + nb);
     frozenEnd = Math.min(frozenEnd, seqEnd);
-    frozenEnd = Math.max(frozenEnd, seqEnd - cap + 1 + nb);
   }
-  win = Math.min(Math.max(win, 0.02), (cap - 2) * dt);
+}
+// Stufe für den Bereich [a, b) (feine Sequenz): fein, solange alles im feinen Puffer liegt
+// und das Zeichnen billig bleibt, sonst grob.
+function tierFor(a, b) {
+  if (!ccap || (a >= fineOldest() && b - a <= 130000))
+    return { mn, mx, av, cap, f: 1, lo: Math.max(fineOldest(), 0), hi: seqEnd };
+  return { mn: cmn, mx: cmx, av: cav, cap: ccap, f: R,
+           lo: Math.max(Math.ceil(seqEnd / R) - ccap + 1, 0), hi: Math.ceil(cFineEnd / R) };
 }
 function showRange(a, b) {
   if (b <= a) return;
@@ -348,6 +519,7 @@ function showRange(a, b) {
   setPaused(true);
 }
 function setPaused(p) {
+  if (p) follow = null;
   if (p && frozenEnd === null) frozenEnd = seqEnd;
   if (p && frozenOff === null) frozenOff = tOff;
   if (!p) { frozenEnd = null; frozenOff = null; }
@@ -355,10 +527,43 @@ function setPaused(p) {
 }
 $("pause").onclick = () => setPaused(frozenEnd === null);
 $("live").onclick = () => { setPaused(false); if (trig.state === "fired") { trig.state = "off"; trig.T = null; updTrig(); } };
-$("win").onchange = () => { win = parseFloat($("win").value); clampView(); yAx = null; };
+function parseWin(txt) {
+  const m = /^\s*([0-9]+(?:[.,][0-9]*)?)\s*(ms|s|sek|sec|m|min|h|std)?\s*$/i.exec(txt);
+  if (!m) return NaN;
+  const v = parseFloat(m[1].replace(",", "."));
+  const u = (m[2] || "s").toLowerCase();
+  return v * (u === "ms" ? 0.001 : u === "m" || u === "min" ? 60 : u === "h" || u === "std" ? 3600 : 1);
+}
+function fmtWin(s) {
+  const r = (v, u) => (Math.round(v * 10) / 10).toString().replace(".", ",") + " " + u;
+  return s < 1 ? r(s * 1000, "ms") : s < 120 ? r(s, "s") : s < 7200 ? r(s / 60, "min") : r(s / 3600, "h");
+}
+function showWin() {
+  const v = fmtWin(win);
+  if (document.activeElement !== $("win") && $("win").value !== v) { $("win").value = v; $("win").classList.remove("bad"); }
+  // Auswahl zeigt den festen Wert, sonst „frei“
+  const p = [...$("winPreset").options].find(o => o.value !== "frei" && Math.abs(+o.value - win) < win * 0.005);
+  const pv = p ? p.value : "frei";
+  if ($("winPreset").value !== pv && document.activeElement !== $("winPreset")) $("winPreset").value = pv;
+}
+$("winPreset").onchange = () => {
+  const v = parseFloat($("winPreset").value);
+  if (!(v > 0)) return;
+  follow = null; win = v; clampView(); yAx = null; $("winPreset").blur(); showWin();
+};
+$("win").onchange = () => {
+  const v = parseWin($("win").value);
+  $("win").classList.toggle("bad", !(v > 0));
+  if (!(v > 0)) return;
+  follow = null; win = v; clampView(); yAx = null; $("win").blur(); showWin();
+};
+$("win").addEventListener("keydown", e => { if (e.key === "Enter") $("win").onchange(); });
+{ const w = new URLSearchParams(location.search).get("fenster");      // z. B. ?fenster=15min
+  if (w && parseWin(w) > 0) { $("win").value = w; win = parseWin(w); } }
 $("scale").onchange = () => { yAx = null; };
 $("yhold").onclick = () => { yHold = !yHold; $("yhold").setAttribute("aria-pressed", yHold); if (!yHold) yAx = null; };
 function zoom(f, frac) {
+  follow = null;
   const nb = Math.round(win / dt), end = frozenEnd ?? seqEnd, start = end - nb;
   if (frozenEnd === null) { win *= f; clampView(); yAx = null; return; }   // live: rechte Kante bleibt
   const anchor = start + frac * nb, nb2 = Math.round(nb * f);
@@ -368,8 +573,10 @@ $("zin").onclick = () => zoom(1 / 1.5, 0.5);
 $("zout").onclick = () => zoom(1.5, 0.5);
 
 let geo = null;      // Geometrie der letzten Zeichnung
+let heavyAt = 0;     // große Fenster (Stunden) nur ca. 4-mal pro Sekunde zeichnen
 function draw() {
   requestAnimationFrame(draw);
+  if (heavyAt && performance.now() - heavyAt < 250) return;
   if (gotAny) {
     const age = (performance.now() - lastMsg) / 1000;
     $("status").textContent = age < 2 ? (frozenEnd === null ? "live" : "angehalten") : "keine Daten seit " + age.toFixed(0) + " s";
@@ -378,6 +585,11 @@ function draw() {
   const d = window.devicePixelRatio || 1, W = cv.width, H = cv.height;
   ctx.clearRect(0, 0, W, H);
   if (!gotAny) return;
+  if (follow && frozenEnd === null) {
+    const a = seqOf(follow.t);
+    win = Math.max((seqEnd - a) * dt * 1.03, 0.05);
+    sel = { a, b: seqEnd };
+  }
   clampView();
 
   const log = $("scale").value === "log";
@@ -389,16 +601,21 @@ function draw() {
   const cols = Math.max(1, Math.floor(pw));
   const xOf = s => padL + (s - start) / nb * pw;
 
+  const T = tierFor(start, end), f = T.f;
+  if (f > 1) loadCoarse(Math.floor(start / f));
+  if (cGaps.length) fillGaps();
   const cMin = new Float32Array(cols), cMax = new Float32Array(cols), cAvg = new Float32Array(cols);
   let lo = Infinity, hi = -Infinity, sum = 0, cnt = 0, peak = -Infinity;
+  const Tm = T.mn, Tx = T.mx, Ta = T.av, Tc = T.cap;
+  heavyAt = nb / f > 100000 ? performance.now() : 0;
   for (let c = 0; c < cols; c++) {
-    const b0 = start + Math.floor(c * nb / cols), b1 = Math.max(b0 + 1, start + Math.floor((c + 1) * nb / cols));
+    const b0 = Math.floor((start + c * nb / cols) / f);
+    const b1 = Math.max(b0 + 1, Math.floor((start + (c + 1) * nb / cols) / f));
     let a = Infinity, b = -Infinity, s = 0, n = 0;
-    for (let q = b0; q < b1; q++) {
-      if (q < 0 || q >= seqEnd || q <= seqEnd - cap) continue;
-      const i = q % cap, x = mn[i];
+    for (let q = Math.max(b0, T.lo); q < b1 && q < T.hi; q++) {
+      const i = q % Tc, x = Tm[i];
       if (x !== x) continue;
-      if (x < a) a = x; if (mx[i] > b) b = mx[i]; s += av[i]; n++;
+      if (x < a) a = x; if (Tx[i] > b) b = Tx[i]; s += Ta[i]; n++;
     }
     cMin[c] = n ? a : NaN; cMax[c] = n ? b : NaN; cAvg[c] = n ? s / n : NaN;
     if (n) { if (a < lo) lo = a; if (b > hi) hi = b; sum += s; cnt += n; if (b > peak) peak = b; }
@@ -410,9 +627,10 @@ function draw() {
   $("s1").textContent = n1 ? fmtA(s1 / n1) : "–";
   $("sw").textContent = cnt ? fmtA(sum / cnt) : "–";
   $("smax").textContent = cnt ? fmtA(peak) : "–";
-  $("sq").textContent = cnt ? fmtQ(sum * dt / 3600) : "–";
+  $("sq").textContent = cnt ? fmtQ(sum * dt * f / 3600) : "–";
   $("viewinfo").textContent = (frozenEnd === null ? "live, " : "angehalten, ") + "Fenster " + fmtS(nb * dt) +
-    ", " + fmtClock(tOf(start), win < 5) + " – " + fmtClock(tOf(end), win < 5);
+    ", " + fmtClock(tOf(start), win < 5) + " – " + fmtClock(tOf(end), win < 5) + (f > 1 ? ", 100-ms-Werte" : "");
+  showWin();
   if (!cnt) { geo = null; return; }
 
   // Zielbereich aus den sichtbaren Daten
@@ -492,11 +710,13 @@ function draw() {
   }
   // x-Achse: Uhrzeit
   const span = nb * dt;
-  const steps = [0.001, 0.002, 0.005, 0.01, 0.02, 0.05, 0.1, 0.2, 0.5, 1, 2, 5, 10, 15, 30, 60];
-  const xst = steps.find(s => span / s <= 7) || 60;
+  const steps = [0.001, 0.002, 0.005, 0.01, 0.02, 0.05, 0.1, 0.2, 0.5, 1, 2, 5, 10, 15, 30, 60,
+                 120, 300, 600, 900, 1800, 3600, 7200, 10800, 21600];
+  const xst = steps.find(s => span / s <= 7) || 21600;
+  const tz = new Date().getTimezoneOffset() * 60;   // Striche auf volle Stunden in Ortszeit
   const tS = tOf(start), tE = tOf(end);
   ctx.textBaseline = "top";
-  for (let t = Math.ceil(tS / xst) * xst; t <= tE + 1e-9; t += xst) {
+  for (let t = Math.ceil((tS - tz) / xst) * xst + tz; t <= tE + 1e-9; t += xst) {
     const x = xOf(seqOf(t));
     ctx.beginPath(); ctx.moveTo(x, padT); ctx.lineTo(x, padT + ph); ctx.stroke();
     ctx.textAlign = x > W - 40 * d ? "right" : "center";
@@ -518,6 +738,18 @@ function draw() {
     if (pen) ctx.lineTo(x, y); else { ctx.moveTo(x, y); pen = true; }
   }
   ctx.stroke();
+  // Marker
+  ctx.font = "600 " + (11 * d) + "px system-ui, sans-serif"; ctx.textBaseline = "top";
+  for (const m of markers) {
+    const q = seqOf(m.t);
+    if (q < start || q > end) continue;
+    const x = Math.round(xOf(q)) + 0.5;
+    ctx.strokeStyle = ctx.fillStyle = css("--mark"); ctx.lineWidth = 1.5 * d;
+    ctx.setLineDash([6 * d, 3 * d]); ctx.beginPath(); ctx.moveTo(x, padT); ctx.lineTo(x, padT + ph); ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.textAlign = x > W - 60 * d ? "right" : "left";
+    ctx.fillText(mkLabel(m), x + (ctx.textAlign === "left" ? 4 : -4) * d, padT + ph - 16 * d);  // unten: oben liegt die Auswahl-Box
+  }
   // Trigger: Linie und Schwelle
   if (trig.T !== null && trig.T >= start && trig.T <= end) {
     const x = xOf(trig.T); ctx.strokeStyle = css("--trig"); ctx.lineWidth = d;
@@ -529,21 +761,30 @@ function draw() {
     ctx.strokeStyle = css("--trig"); ctx.lineWidth = d; ctx.setLineDash([2 * d, 4 * d]);
     ctx.beginPath(); ctx.moveTo(padL, y); ctx.lineTo(padL + pw, y); ctx.stroke(); ctx.setLineDash([]);
   }
-  geo = { padL, pw, cols, cMin, cMax, cAvg, start, nb, d, end };
+  geo = { padL, pw, cols, cMin, cMax, cAvg, start, nb, d, end, f };
   updSel();
 }
 requestAnimationFrame(draw);
 
 // ---------- Auswahl: Statistik
 function rangeStats(a, b) {
-  a = Math.max(Math.round(a), seqEnd - cap + 1, 0); b = Math.min(Math.round(b), seqEnd);
+  a = Math.max(Math.round(a), oldestSeq(), 0); b = Math.max(Math.min(Math.round(b), seqEnd), a);
+  const T = tierFor(a, b), f = T.f;
+  const qa = Math.max(Math.floor(a / f), T.lo), qb = Math.min(Math.ceil(b / f), T.hi);
   let s = 0, n = 0, lo = Infinity, hi = -Infinity;
-  for (let q = a; q < b; q++) {
-    const i = q % cap; if (mn[i] !== mn[i]) continue;
-    s += av[i]; n++; if (mn[i] < lo) lo = mn[i]; if (mx[i] > hi) hi = mx[i];
+  for (let q = qa; q < qb; q++) {
+    const i = q % T.cap; if (T.mn[i] !== T.mn[i]) continue;
+    s += T.av[i]; n++; if (T.mn[i] < lo) lo = T.mn[i]; if (T.mx[i] > hi) hi = T.mx[i];
   }
-  return { a, b, n, mean: n ? s / n : NaN, lo, hi, q: s * dt / 3600, dur: (b - a) * dt };
+  return { a, b, n, f, mean: n ? s / n : NaN, lo, hi, q: s * dt * f / 3600, dur: (b - a) * dt,
+           full: Math.max(1, Math.ceil(b / f) - Math.floor(a / f)) };
 }
+// Akkulaufzeit, wenn der Strom dauerhaft so wäre wie im Bereich (Akku aus dem Projekt)
+function rangeDays(mean) {
+  if (!(mean > 0) || !status.battery_mAh) return NaN;
+  return status.battery_mAh * 1000 * (status.battery_usable || 1) / mean / 24;
+}
+const fmtDays = d => !isFinite(d) ? "–" : (d < 10 ? d.toFixed(1).replace(".", ",") : d.toFixed(0)) + " Tage";
 let selShown = "";
 function updSel() {
   const box = $("selbox");
@@ -551,13 +792,15 @@ function updSel() {
   const r = rangeStats(sel.a, sel.b);
   const txt = `<b>${fmtS(r.dur)}</b> ab ${fmtClock(tOf(r.a), true)} · Mittel <b>${fmtA(r.mean)}</b> · ` +
               `Min ${fmtA(r.lo)} · Spitze <b>${fmtA(r.hi)}</b> · Ladung <b>${fmtQ(r.q)}</b>` +
-              (r.n < r.b - r.a ? ` <span class="hint">(${Math.round(100 * r.n / Math.max(1, r.b - r.a))} % Daten)</span>` : "");
+              (isFinite(rangeDays(r.mean)) ? ` · Akku ≙ <b>${fmtDays(rangeDays(r.mean))}</b>` : "") +
+              (r.n < r.full * 0.99 ? ` <span class="hint">(${Math.round(100 * r.n / r.full)} % Daten)</span>` : "") +
+              (r.f > 1 ? ` <span class="hint">(100-ms-Werte)</span>` : "");
   if (txt !== selShown) { $("seltext").innerHTML = txt; selShown = txt; }
   box.style.display = "block";
 }
 $("selzoom").onclick = () => { if (sel) { const m = (sel.b - sel.a) * 0.05; showRange(sel.a - m, sel.b + m); } };
-$("selclear").onclick = () => { sel = null; };
-document.addEventListener("keydown", e => { if (e.key === "Escape") sel = null; });
+$("selclear").onclick = () => { sel = null; follow = null; };
+document.addEventListener("keydown", e => { if (e.key === "Escape") { sel = null; follow = null; } });
 
 // ---------- Maus / Touch
 const cur = $("cursor");
@@ -578,6 +821,7 @@ cv.addEventListener("pointermove", e => {
   if (drag) {
     if (Math.abs(p.s - drag.s0) * geo.pw / geo.nb > 3 * geo.d) {
       if (!drag.moved && frozenEnd === null) setPaused(true);
+      follow = null;
       drag.moved = true;
       sel = { a: Math.min(drag.s0, p.s), b: Math.max(drag.s0, p.s) };
     }
@@ -592,7 +836,12 @@ cv.addEventListener("pointermove", e => {
 });
 cv.addEventListener("pointerup", () => { drag = null; });
 cv.addEventListener("pointerleave", () => { cur.style.display = "none"; });
-cv.addEventListener("dblclick", () => { sel = null; setPaused(false); });
+cv.addEventListener("dblclick", () => { sel = null; follow = null; setPaused(false); });
+cv.addEventListener("contextmenu", e => {          // Rechtsklick: Marker an dieser Stelle
+  if (!geo) return;
+  e.preventDefault();
+  addMarker(tOf(Math.min(seqAtX(e.clientX).s, seqEnd)));
+});
 cv.addEventListener("wheel", e => {
   if (!geo) return;
   e.preventDefault();
@@ -606,6 +855,64 @@ cv.addEventListener("wheel", e => {
   }
 }, { passive: false });
 
+// ---------- Marker (nach Uhrzeit, nur in diesem Browser)
+const MK_KEY = "ppk2_marker";
+let markers = [];
+try { markers = (JSON.parse(localStorage.getItem(MK_KEY) || "[]") || []).filter(m => isFinite(m.t) && isFinite(m.n)); }
+catch (_) { markers = []; }
+const mkLabel = m => m.name || "M" + m.n;
+const esc = v => String(v).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
+function saveMarkers() { try { localStorage.setItem(MK_KEY, JSON.stringify(markers)); } catch (_) {} }
+function addMarker(t) {
+  if (!isFinite(t)) return;
+  const n = markers.reduce((a, m) => Math.max(a, m.n), 0) + 1;
+  markers.push({ n, t, name: "" }); markers.sort((a, b) => a.t - b.t);
+  saveMarkers(); renderMarkers();
+  $("mkFrom").value = String(n); $("mkTo").value = "jetzt";
+}
+function mkDay(t) { return new Date(t * 1000).toLocaleDateString("de-DE", { day: "2-digit", month: "2-digit" }); }
+function renderMarkers() {
+  const f = $("mkFrom").value, to = $("mkTo").value;
+  const opts = markers.map(m => `<option value="${m.n}">${esc(mkLabel(m))} · ${fmtClock(m.t)}</option>`).join("");
+  $("mkFrom").innerHTML = opts;
+  $("mkTo").innerHTML = '<option value="jetzt">jetzt</option>' + opts;
+  if (markers.some(m => String(m.n) === f)) $("mkFrom").value = f;
+  else if (markers.length) $("mkFrom").value = String(markers[markers.length - 1].n);
+  if (to === "jetzt" || markers.some(m => String(m.n) === to)) $("mkTo").value = to || "jetzt";
+  const oldest = gotAny ? tOf(oldestSeq()) : -Infinity;
+  $("mkList").innerHTML = markers.length ? markers.map(m =>
+    `<span class="mk${m.t < oldest ? " old" : ""}" title="${m.t < oldest ? "nicht mehr im Verlauf" : ""}">` +
+    `<button class="mkname" data-ren="${m.n}" title="umbenennen">${esc(mkLabel(m))}</button>` +
+    `${mkDay(m.t)} ${fmtClock(m.t)}` +
+    `<button data-now="${m.n}" title="ab diesem Marker bis jetzt, wächst mit">→ jetzt</button>` +
+    `<button data-del="${m.n}" title="löschen">×</button></span>`).join("")
+    : '<span class="hint">noch keine Marker</span>';
+}
+const mkByN = n => markers.find(m => String(m.n) === String(n));
+function showMarkers(a, b) {                  // b = null: bis jetzt (live)
+  if (!a || !gotAny) return;
+  if (!b) { setPaused(false); follow = { t: a.t }; yAx = null; return; }
+  const t0 = Math.min(a.t, b.t), t1 = Math.max(a.t, b.t);
+  const sa = seqOf(t0), sb = seqOf(t1), m = Math.max((sb - sa) * 0.03, 1);
+  showRange(sa - m, Math.min(sb + m, seqEnd)); sel = { a: sa, b: sb };
+}
+$("mkAdd").onclick = () => { if (gotAny) addMarker(tOf(seqEnd)); };
+$("mkShow").onclick = () => {
+  const to = $("mkTo").value;
+  showMarkers(mkByN($("mkFrom").value), to === "jetzt" ? null : mkByN(to));
+};
+$("mkList").onclick = e => {
+  const b = e.target.closest("button"); if (!b) return;
+  if (b.dataset.now) showMarkers(mkByN(b.dataset.now), null);
+  else if (b.dataset.del) { markers = markers.filter(m => String(m.n) !== b.dataset.del); saveMarkers(); renderMarkers(); }
+  else if (b.dataset.ren) {
+    const m = mkByN(b.dataset.ren), v = prompt("Name für " + mkLabel(m), m.name || "");
+    if (v !== null) { m.name = v.trim().slice(0, 40); saveMarkers(); renderMarkers(); }
+  }
+};
+renderMarkers();
+setInterval(renderMarkers.bind(null), 30000);   // Hinweis „nicht mehr im Verlauf“ aktuell halten
+
 // ---------- Export
 function exportRange() {
   if (sel) return [Math.round(sel.a), Math.round(sel.b)];
@@ -618,13 +925,14 @@ function download(name, blob) {
 function stamp(t) { return new Date(t * 1000).toISOString().replace(/[:]/g, "-").replace(/\..*/, ""); }
 $("csv").onclick = () => {
   if (!gotAny) return;
-  let [a, b] = exportRange(); a = Math.max(a, seqEnd - cap + 1, 0); b = Math.min(b, seqEnd);
+  let [a, b] = exportRange(); a = Math.max(a, oldestSeq(), 0); b = Math.min(b, seqEnd);
+  const T = tierFor(a, b), f = T.f;
   const lines = ["time_utc,t_s,min_uA,max_uA,mean_uA"];
-  for (let q = a; q < b; q++) {
-    const i = q % cap; if (mn[i] !== mn[i]) continue;
-    const t = tOf(q);
-    lines.push(new Date(t * 1000).toISOString() + "," + ((q - a) * dt).toFixed(3) + "," +
-               mn[i].toPrecision(6) + "," + mx[i].toPrecision(6) + "," + av[i].toPrecision(6));
+  for (let q = Math.max(Math.floor(a / f), T.lo); q < Math.min(Math.ceil(b / f), T.hi); q++) {
+    const i = q % T.cap; if (T.mn[i] !== T.mn[i]) continue;
+    const t = tOf(q * f);
+    lines.push(new Date(t * 1000).toISOString() + "," + ((q * f - a) * dt).toFixed(3) + "," +
+               T.mn[i].toPrecision(6) + "," + T.mx[i].toPrecision(6) + "," + T.av[i].toPrecision(6));
   }
   download("ppk2_live_" + stamp(tOf(a)) + ".csv", new Blob([lines.join("\n") + "\n"], { type: "text/csv" }));
 };
@@ -639,6 +947,7 @@ $("png").onclick = () => {
   o.fillStyle = css("--fg"); o.font = "600 " + (13 * d) + "px system-ui, sans-serif"; o.textBaseline = "top";
   o.fillText("PPK2 · " + new Date(tOf(a) * 1000).toLocaleString("de-DE") + " · " + fmtS(r.dur) +
              " · Mittel " + fmtA(r.mean) + " · Spitze " + fmtA(r.hi) + " · Ladung " + fmtQ(r.q) +
+             (isFinite(rangeDays(r.mean)) ? " · Akku ≙ " + fmtDays(rangeDays(r.mean)) : "") +
              (sel ? " (Auswahl)" : ""), 12 * d, 10 * d);
   out.toBlob(bl => download("ppk2_live_" + stamp(tOf(a)) + ".png", bl), "image/png");
 };

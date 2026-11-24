@@ -86,7 +86,7 @@ class FakeMQTT:
         self.msgs = []
 
     def publish(self, topic, payload, retain=False):
-        self.msgs.append((topic, json.loads(payload)))
+        self.msgs.append((topic, json.loads(payload) if payload else None))
 
 
 def load_logger(env):
@@ -159,9 +159,10 @@ class LoggerSimTest(unittest.TestCase):
             self.assertEqual(keys[:9], ["mean_uA", "quiet_avg_uA", "median_uA", "min_uA",
                                         "max_uA", "charge_uAh", "avg_total_uA",
                                         "runtime_h", "est_days"])
-            self.assertEqual(keys[9:], ["wake_last_uAh", "wake_last_s", "wake_count"])
+            self.assertEqual(keys[9:], ["wake_last_uAh", "wake_last_s", "wake_count",
+                                        "projekt"])
             lg.WAKE_CAPTURE = False
-            self.assertEqual(len(lg.ha_sensors()), 9)
+            self.assertEqual([s[0] for s in lg.ha_sensors()][9:], ["projekt"])
 
     def test_recorder_fehler_stoppt_messung_nicht(self):
         with tempfile.TemporaryDirectory() as d:
@@ -177,7 +178,7 @@ class LoggerSimTest(unittest.TestCase):
                 def close(self, **kw):
                     pass
 
-            lg.make_recorder = lambda: Broken()
+            lg.make_recorder = lambda *a, **k: Broken()
             th = threading.Thread(target=lg.measure, args=(None,))
             th.start()
             time.sleep(3)

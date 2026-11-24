@@ -15,7 +15,8 @@ import argparse, csv, glob, json, math, os, sys
 from datetime import datetime, timedelta, timezone
 
 ap = argparse.ArgumentParser()
-ap.add_argument("--dir", default=os.getenv("OUT_DIR", "data"))
+ap.add_argument("--dir", default=os.getenv("OUT_DIR", "data"),
+                help="Datenordner oder Projektordner (data/projekte/<name>); mit Projekten ohne Angabe das aktive")
 ap.add_argument("--hours", type=float,
                 help="Dauer in h (Standard 24 h bis jetzt; mit --von: ab --von, sonst bis Ende)")
 ap.add_argument("--von", help="Start, UTC, z.B. 2026-11-07T10:30")
@@ -31,6 +32,19 @@ ap.add_argument("--png", help="Diagramm (Ruhestrom pro Stunde, Ladung pro Wachph
 ap.add_argument("--json", action="store_true",
                 help="Ergebnis als JSON auf stdout statt Text (Zeiten als Unix-Sekunden, UTC)")
 a = ap.parse_args()
+
+
+def _resolve_dir(d):
+    """Datenordner mit Projekten (projekte.json): Ordner des aktiven Projekts."""
+    try:
+        sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+        from projects import resolve_dir
+    except ImportError:
+        return d
+    return resolve_dir(d)
+
+
+a.dir = _resolve_dir(a.dir)
 
 # Im JSON-Modus keine Textausgabe, Fehler als {"error": ...}
 say = (lambda *x, **k: None) if a.json else print

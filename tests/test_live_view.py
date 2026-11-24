@@ -5,6 +5,7 @@ import os
 import sys
 import time
 import unittest
+import urllib.error
 import urllib.parse
 import urllib.request
 
@@ -61,6 +62,36 @@ class FeedTest(unittest.TestCase):
         self.assertEqual(end, 5500)
         self.assertEqual(float(mn[-1]), 299_900.0)
 
+    def test_grobe_stufe(self):
+        x = np.random.default_rng(3).uniform(0, 1000, 1_000_000)      # 10 s
+        f = LiveFeed(history_s=2, long_s=5.0)                        # 50 grobe Buckets
+        pos, sizes, i = 0, [7, 10_000, 99_999, 123_456, 1], 0
+        while pos < len(x):
+            n = sizes[i % len(sizes)]
+            f.feed(x[pos:pos + n], min(pos + n, len(x)) / 100_000)
+            pos += n
+            i += 1
+        self.assertEqual(f.cseq, 100)
+        von, bis, t, mn, mx, av = f.history(0, 1000)
+        self.assertEqual((von, bis), (50, 100))                      # nur die letzten 5 s
+        ref = x.reshape(100, 10_000)[50:]
+        np.testing.assert_allclose(mn, ref.min(axis=1), rtol=1e-6)
+        np.testing.assert_allclose(mx, ref.max(axis=1), rtol=1e-6)
+        np.testing.assert_allclose(av, ref.mean(axis=1), rtol=1e-5)
+        np.testing.assert_allclose(t, (np.arange(50, 100) + 1) * 0.1, atol=1e-9)
+
+    def test_grobe_stufe_luecke(self):
+        f = LiveFeed(history_s=1, long_s=60.0)
+        f.feed(np.full(15_000, 5.0), 0.15)                           # 150 feine Buckets
+        f.feed(np.full(200_000, 9.0), 2.15)                          # größer als der Puffer
+        von, bis, _, mn, _, av = f.history(0, 100)
+        self.assertEqual(f.seq, 2150)
+        self.assertEqual(bis, 21)
+        self.assertEqual(float(mn[0]), 5.0)
+        self.assertEqual(float(av[1]), 5.0)                          # 50 × 5, Rest fehlt
+        self.assertTrue(np.isnan(av[5]))                             # übersprungen
+        self.assertEqual(float(av[-1]), 9.0)
+
     def test_rechenzeit(self):
         f = LiveFeed()
         x = np.random.default_rng(2).uniform(0, 1e4, 10_000)
@@ -87,6 +118,22 @@ class ServerTest(unittest.TestCase):
         with urllib.request.urlopen(self.base + "/info", timeout=5) as r:
             info = json.loads(r.read())
         self.assertAlmostEqual(info["bucket_s"], 0.001)
+        self.assertEqual(info["coarse"], 100)
+
+    def test_verlauf_binaer(self):
+        self.feed.feed(np.arange(300_000, dtype=float), 3.0)         # 3 s = 30 grobe
+        with urllib.request.urlopen(self.base + "/verlauf?von=10&bis=20", timeout=5) as r:
+            von, bis, body = int(r.headers["X-Von"]), int(r.headers["X-Bis"]), r.read()
+        self.assertEqual((von, bis), (10, 20))
+        t = np.frombuffer(body[:80], "<f8")
+        d = np.frombuffer(body[80:], "<f4").reshape(10, 3)
+        self.assertAlmostEqual(float(t[0]), 1.1)
+        self.assertEqual(float(d[0, 0]), 100_000.0)
+        self.assertEqual(float(d[0, 1]), 109_999.0)
+        with self.assertRaises(urllib.error.HTTPError) as e:
+            urllib.request.urlopen(self.base + "/verlauf?von=x", timeout=5)
+        with e.exception:
+            self.assertEqual(e.exception.code, 400)
 
     def test_stream_mit_vorlauf_und_neuen_daten(self):
         self.feed.feed(np.full(100_000, 150.0), 100.0)      # 1 s Vorlauf

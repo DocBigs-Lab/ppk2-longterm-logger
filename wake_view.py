@@ -228,6 +228,16 @@ def serve(wdir, max_points=20000):
         sys.stdout.flush()
 
 
+def _resolve_dir(d):
+    """Datenordner mit Projekten (projekte.json): Ordner des aktiven Projekts."""
+    try:
+        sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+        from projects import resolve_dir
+    except ImportError:
+        return d
+    return resolve_dir(d)
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("datei", nargs="?",
@@ -244,6 +254,7 @@ def main():
     ap.add_argument("--serve", action="store_true", help=argparse.SUPPRESS)
     a = ap.parse_args()
 
+    a.dir = _resolve_dir(a.dir)
     wdir = os.path.join(a.dir, "wake")
     if a.serve:
         if np is None:
